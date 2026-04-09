@@ -1,59 +1,81 @@
 pipeline {
-    agent any
-
+    agent none  // Không chiếm dụng agent ngay từ đầu
+    
     environment {
-        REMOTE_IP = '172.17.0.1'
-        
-        REMOTE_USER = 'wind' 
-        
+        JENKINS_NODE_COOKIE = 'dontKillMe'
+        REMOTE_USER = 'wind'
+        REMOTE_IP   = '172.17.0.1' 
         DEPLOY_PATH = '/home/wind/fnb'
-        SERVICE_NAME = 'fnb_be.service' 
+        SERVICE_NAME = 'fnb_be.service'
     }
 
     stages {
-        stage('Checkout') {
-            steps {
-                checkout scm
-            }
-        }
+        stage('Build & Deploy Flow') {
+            agent any
+            
+            stages {
+                stage('Clean Workspace') {
+                    steps {
+                        script {
+                            try {
+                                sh 'docker run --rm -v $(pwd):/workspace alpine rm -rf /workspace/*'
+                                sh 'docker run --rm -v $(pwd):/workspace alpine rm -rf /workspace/.*'
+                            } catch (Exception e) {
+                                cleanWs()
+                            }
+                        }
+                    }
+                }
 
-        stage('Package, Build & Deploy on Host') {
-            steps {
-                echo "Đóng gói mã nguồn và gửi trực tiếp sang host để build..."
-                script {
-                    withCredentials([
-                        file(credentialsId: 'dev-env-file', variable: 'ENV_FILE'),
-                        file(credentialsId: 'dev-firebase-service-account', variable: 'FIREBASE_FILE')
-                    ]) {
-                        sh """
-                            # Đóng gói toàn bộ code workspace (đẩy file nén ra chỗ khác để tránh lỗi changed as we read it)
-                            tar --exclude='./.git' -czf /tmp/source_fnb.tar.gz .
-                            
-                            # Đảm bảo các thư mục tồn tại trên host
-                            ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} "mkdir -p ${DEPLOY_PATH}/src"
-                            
-                            # SCP mã nguồn nén sang Host
-                            scp -o StrictHostKeyChecking=no /tmp/source_fnb.tar.gz ${REMOTE_USER}@${REMOTE_IP}:${DEPLOY_PATH}/source.tar.gz
-                            rm -f /tmp/source_fnb.tar.gz
-                            
-                            # SCP file cấu hình sang Host
-                            scp -o StrictHostKeyChecking=no \$ENV_FILE ${REMOTE_USER}@${REMOTE_IP}:${DEPLOY_PATH}/.env
-                            scp -o StrictHostKeyChecking=no \$FIREBASE_FILE ${REMOTE_USER}@${REMOTE_IP}:${DEPLOY_PATH}/firebase-service-account.json
-                            
-                            # SSH sang Host để giải nén mã nguồn, build và restart
-                            # Lưu ý: nếu máy đích không nhận lệnh 'go', bạn có thể cần thay 'go' bằng '/usr/local/go/bin/go'
-                            ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} "\
-                                cd ${DEPLOY_PATH} && \
-                                tar -xzf source.tar.gz -C ./src && \
-                                cd ./src && \
-                                export PATH=\\\$PATH:/usr/local/go/bin:/usr/bin && \
-                                CGO_ENABLED=0 GOOS=linux go build -a -o ../fnb_be ./cmd/server && \
-                                cd .. && \
-                                sudo systemctl restart ${SERVICE_NAME} && \
-                                rm -f source.tar.gz && \
-                                rm -rf ./src \
-                            "
-                        """
+                stage('Checkout') {
+                    steps {
+                        checkout scm
+                    }
+                }
+
+                stage('Prepare Secrets') {
+                    steps {
+                        withCredentials([
+                            file(credentialsId: 'dev-env-file', variable: 'ENV_FILE'),
+                            file(credentialsId: 'dev-firebase-service-account', variable: 'FIREBASE_FILE')
+                        ]) {
+                            script {
+                                sh '''
+                                    cp $ENV_FILE .env
+                                    cp $FIREBASE_FILE firebase-service-account.json
+                                '''
+                            }
+                        }
+                    }
+                }
+
+                stage('Deploy & Build on Host (SSH)') {
+                    steps {
+                        sshagent(['jenkin-ssh-key']) { 
+                            script {
+                                echo "Deploying to ${REMOTE_USER}@${REMOTE_IP}..."
+
+                                sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} 'mkdir -p ${DEPLOY_PATH}/src'"
+                                
+                                echo "--- Streaming source code & secrets to target ---"
+                                sh """
+                                    tar -czf - --exclude='.git' . | \
+                                    ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} \
+                                    "tar -xzf - -C ${DEPLOY_PATH}/src"
+                                """
+
+                                echo "--- Building Golang on target ---"
+                                sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} 'cd ${DEPLOY_PATH}/src && export PATH=\\$PATH:/usr/local/go/bin:/usr/bin && CGO_ENABLED=0 GOOS=linux go build -a -o ../fnb_be ./cmd/server'"
+                                
+                                echo "--- Moving secrets and Restarting Service via Systemd ---"
+                                sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} 'mv -f ${DEPLOY_PATH}/src/.env ${DEPLOY_PATH}/.env'"
+                                sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} 'mv -f ${DEPLOY_PATH}/src/firebase-service-account.json ${DEPLOY_PATH}/firebase-service-account.json'"
+                                sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} 'sudo systemctl restart ${SERVICE_NAME}'"
+                                
+                                echo "--- Cleaning up source folder ---"
+                                sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} 'rm -rf ${DEPLOY_PATH}/src'"
+                            }
+                        }
                     }
                 }
             }
@@ -61,8 +83,11 @@ pipeline {
     }
 
     post {
-        always {
-            cleanWs()
+        success {
+            echo 'Deployment Finished Successfully!'
+        }
+        failure {
+            echo 'Deployment Failed.'
         }
     }
 }
