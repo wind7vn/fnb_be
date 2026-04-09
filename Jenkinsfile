@@ -26,8 +26,8 @@ pipeline {
                         file(credentialsId: 'dev-firebase-service-account', variable: 'FIREBASE_FILE')
                     ]) {
                         sh """
-                            # Đóng gói toàn bộ code workspace (nén tất cả)
-                            tar -czf source.tar.gz .
+                            # Đóng gói toàn bộ code workspace (loại trừ file nén và thư mục .git)
+                            tar --exclude='./source.tar.gz' --exclude='./.git' -czf source.tar.gz .
                             
                             # Đảm bảo các thư mục tồn tại trên host
                             ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} "mkdir -p ${DEPLOY_PATH}/src"
