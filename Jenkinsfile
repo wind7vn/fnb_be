@@ -1,6 +1,10 @@
 pipeline {
     agent any
 
+    tools {
+        go 'go'
+    }
+
     environment {
         REMOTE_IP = '172.17.0.1'
         
@@ -18,12 +22,6 @@ pipeline {
         }
 
         stage('Build Binary') {
-            agent {
-                docker {
-                    image 'golang:1.26'
-                    reuseNode true
-                }
-            }
             steps {
                 echo "Đang build Golang CGO_ENABLED=0..."
                 sh 'CGO_ENABLED=0 GOOS=linux go build -a -o fnb_be ./cmd/server'
