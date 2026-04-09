@@ -58,11 +58,14 @@ pipeline {
                                 """
 
                                 echo "--- Building Golang on target ---"
-                                sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} 'cd ${DEPLOY_PATH}/src && export PATH=\\$PATH:/usr/local/go/bin:/usr/bin && CGO_ENABLED=0 GOOS=linux go build -a -o ../fnb_be ./cmd/server'"
+                                sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} 'cd ${DEPLOY_PATH}/src && export PATH=\\$PATH:/usr/local/go/bin:/usr/bin && CGO_ENABLED=0 GOOS=linux go build -a -o ../fnb_be ./cmd/server && CGO_ENABLED=0 GOOS=linux go build -a -o ../fnb_migrator ./cmd/migrator'"
                                 
-                                echo "--- Moving secrets and Restarting Service via Systemd (User Mode) ---"
+                                echo "--- Moving secrets to target ---"
                                 sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} 'mv -f ${DEPLOY_PATH}/src/.env ${DEPLOY_PATH}/.env'"
                                 sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} 'mv -f ${DEPLOY_PATH}/src/firebase-service-account.json ${DEPLOY_PATH}/firebase-service-account.json'"
+                                
+                                echo "--- Running Database Migrations ---"
+                                sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} 'cd ${DEPLOY_PATH} && ./fnb_migrator'"
                                 
                                 echo "--- Setting up Systemd Service File ---"
                                 sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} 'mkdir -p ~/.config/systemd/user'"
