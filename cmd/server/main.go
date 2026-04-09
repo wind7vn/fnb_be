@@ -42,7 +42,7 @@ func main() {
 
 	// Add CORS middleware to allow FE to connect
 	app.Use(cors.New(cors.Config{
-		AllowOrigins:     "*", // Trong môi trường thật có thể set "https://yourfrontend.com"
+		AllowOrigins:     "https://fnb-dev.windai.online, https://windai.online, http://localhost:8080",
 		AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
 		AllowMethods:     "GET, POST, HEAD, PUT, DELETE, PATCH, OPTIONS",
 		AllowCredentials: true,
