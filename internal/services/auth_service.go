@@ -14,11 +14,12 @@ import (
 )
 
 type AuthService struct {
-	userRepo ports.UserRepository
+	userRepo   ports.UserRepository
+	tenantRepo ports.TenantRepository
 }
 
-func NewAuthService(repo ports.UserRepository) *AuthService {
-	return &AuthService{userRepo: repo}
+func NewAuthService(repo ports.UserRepository, tenantRepo ports.TenantRepository) *AuthService {
+	return &AuthService{userRepo: repo, tenantRepo: tenantRepo}
 }
 
 type LoginRequest struct {
@@ -118,4 +119,65 @@ func (s *AuthService) GenerateGuestToken(tenantID, tableID string) (string, *err
 	}
 
 	return tokenString, nil
+}
+
+func (s *AuthService) GetMyTenants(userID string) ([]map[string]interface{}, *errors.AppError) {
+	user, err := s.userRepo.FindByID(userID)
+	if err != nil {
+		return nil, errors.NewBadRequest(errors.ErrCodeUserNotFound, "Không tìm thấy người dùng", err)
+	}
+
+	accounts, err := s.userRepo.FindAllByPhone(user.PhoneNumber)
+	if err != nil {
+		return nil, errors.NewInternalServer(err)
+	}
+
+	var results []map[string]interface{}
+	for _, acc := range accounts {
+		if acc.TenantID != nil {
+			tenant, tErr := s.tenantRepo.FindByID(acc.TenantID.String())
+			if tErr == nil {
+				results = append(results, map[string]interface{}{
+					"tenant_id":   tenant.ID.String(),
+					"tenant_name": tenant.Name,
+					"role":        acc.Role,
+				})
+			}
+		}
+	}
+	return results, nil
+}
+
+func (s *AuthService) SwitchTenant(userID string, targetTenantID string) (*AuthResponse, *errors.AppError) {
+	user, err := s.userRepo.FindByID(userID)
+	if err != nil {
+		return nil, errors.NewBadRequest(errors.ErrCodeUserNotFound, "Không tìm thấy người dùng", err)
+	}
+
+	targetUser, err := s.userRepo.FindByPhoneAndTenant(user.PhoneNumber, &targetTenantID)
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, errors.NewBadRequest(errors.ErrCodeUnauthorized, "Bạn không có quyền truy cập cửa hàng này", err)
+		}
+		return nil, errors.NewInternalServer(err)
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"user_id":   targetUser.ID.String(),
+		"tenant_id": targetUser.TenantID.String(),
+		"role":      targetUser.Role,
+		"exp":       time.Now().Add(time.Duration(config.AppConfig.JWTExpireMinutes) * time.Minute).Unix(),
+	})
+
+	tokenString, err2 := token.SignedString([]byte(config.AppConfig.JWTSecret))
+	if err2 != nil {
+		return nil, errors.NewInternalServer(err2)
+	}
+
+	return &AuthResponse{
+		Token:        tokenString,
+		RefreshToken: "", // Can implement refresh token logic later
+		Role:         targetUser.Role,
+		FullName:     targetUser.FullName,
+	}, nil
 }

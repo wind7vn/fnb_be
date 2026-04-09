@@ -12,4 +12,5 @@ type UserRepository interface {
 	Update(user *domain.User) error
 	SaveDeviceToken(device *domain.UserDevice) error
 	FindStaffByTenant(tenantID string) ([]domain.User, error)
+	FindAllByPhone(phone string) ([]domain.User, error)
 }

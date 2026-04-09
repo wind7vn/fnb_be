@@ -55,3 +55,9 @@ func (r *userRepository) FindStaffByTenant(tenantID string) ([]domain.User, erro
 	err := r.db.Where("tenant_id = ?", tenantID).Find(&users).Error
 	return users, err
 }
+
+func (r *userRepository) FindAllByPhone(phone string) ([]domain.User, error) {
+	var users []domain.User
+	err := r.db.Where("phone_number = ?", phone).Find(&users).Error
+	return users, err
+}

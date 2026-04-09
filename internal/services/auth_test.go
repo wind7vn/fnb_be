@@ -35,7 +35,8 @@ func setupTest() *services.AuthService {
 	db.Create(&user)
 
 	repo := repositories.NewUserRepository(db)
-	return services.NewAuthService(repo)
+	tenantRepo := repositories.NewTenantRepository(db)
+	return services.NewAuthService(repo, tenantRepo)
 }
 
 func TestLogin_Success(t *testing.T) {

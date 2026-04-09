@@ -27,6 +27,8 @@ func (h *AuthHandler) SetupRoutes(router fiber.Router) {
 	authGroup.Use(middlewares.JWTMiddleware())
 	authGroup.Get("/me", h.GetMe)
 	authGroup.Post("/devices", h.RegisterDevice)
+	authGroup.Get("/my-tenants", h.GetMyTenants)
+	authGroup.Post("/switch-tenant", h.SwitchTenant)
 }
 
 func (h *AuthHandler) Login(c *fiber.Ctx) error {
@@ -120,4 +122,34 @@ func (h *AuthHandler) GuestLogin(c *fiber.Ctx) error {
 	return response.Success(c, fiber.Map{
 		"token": token,
 	})
+}
+
+func (h *AuthHandler) GetMyTenants(c *fiber.Ctx) error {
+	userID := c.Locals("user_id").(string)
+
+	tenants, appErr := h.authService.GetMyTenants(userID)
+	if appErr != nil {
+		return response.Error(c, appErr)
+	}
+
+	return response.Success(c, tenants)
+}
+
+func (h *AuthHandler) SwitchTenant(c *fiber.Ctx) error {
+	userID := c.Locals("user_id").(string)
+
+	var req struct {
+		TargetTenantID string `json:"target_tenant_id"`
+	}
+
+	if err := c.BodyParser(&req); err != nil {
+		return response.Error(c, errors.NewBadRequest(errors.ErrCodeValidationFailed, "Dữ liệu không hợp lệ", err))
+	}
+
+	resp, appErr := h.authService.SwitchTenant(userID, req.TargetTenantID)
+	if appErr != nil {
+		return response.Error(c, appErr)
+	}
+
+	return response.Success(c, resp)
 }
