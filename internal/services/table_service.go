@@ -66,3 +66,22 @@ func (s *TableService) UpdateStatus(tenantID string, id string, status string) (
 	// TODO: Emit Redis Pub/Sub WebSocket event "TABLE_STATUS_CHANGED" here in Phase 9
 	return table, nil
 }
+
+func (s *TableService) Delete(tenantID string, id string) *errors.AppError {
+	table, err := s.repo.FindByID(id, tenantID)
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return errors.NewBadRequest(errors.ErrCodeValidationFailed, "Bàn không tồn tại", err)
+		}
+		return errors.NewInternalServer(err)
+	}
+
+	if table.Status != "Available" {
+		return errors.NewBadRequest(errors.ErrCodeValidationFailed, "Bàn đang có khách hoặc chờ thanh toán nên không thể xoá", nil)
+	}
+
+	if err := s.repo.Delete(id, tenantID); err != nil {
+		return errors.NewInternalServer(err)
+	}
+	return nil
+}

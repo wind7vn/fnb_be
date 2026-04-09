@@ -29,6 +29,7 @@ func (h *TableHandler) SetupRoutes(router fiber.Router) {
 
 	// Only Owner/Manager can Create tables structurally
 	tableGroup.Post("/", middlewares.RolesAllowed(domain.RoleOwner, domain.RoleManager), h.Create)
+	tableGroup.Delete("/:id", middlewares.RolesAllowed(domain.RoleOwner, domain.RoleManager), h.Delete)
 }
 
 func (h *TableHandler) Create(c *fiber.Ctx) error {
@@ -72,4 +73,15 @@ func (h *TableHandler) UpdateStatus(c *fiber.Ctx) error {
 		return response.Error(c, appErr)
 	}
 	return response.Success(c, table)
+}
+
+func (h *TableHandler) Delete(c *fiber.Ctx) error {
+	tenantID := c.Locals("tenant_id").(string)
+	tableID := c.Params("id")
+
+	appErr := h.svc.Delete(tenantID, tableID)
+	if appErr != nil {
+		return response.Error(c, appErr)
+	}
+	return response.Success(c, fiber.Map{"message": "Bàn đã được xoá"})
 }

@@ -7,4 +7,5 @@ type TableRepository interface {
 	FindAllByTenant(tenantID string) ([]domain.Table, error)
 	FindByID(id string, tenantID string) (*domain.Table, error)
 	Update(table *domain.Table) error
+	Delete(id string, tenantID string) error
 }

@@ -33,3 +33,7 @@ func (r *tableRepository) FindByID(id string, tenantID string) (*domain.Table, e
 func (r *tableRepository) Update(table *domain.Table) error {
 	return r.dbConn.Save(table).Error
 }
+
+func (r *tableRepository) Delete(id string, tenantID string) error {
+	return r.dbConn.Scopes(db.TenantScope(tenantID)).Where("id = ?", id).Delete(&domain.Table{}).Error
+}
