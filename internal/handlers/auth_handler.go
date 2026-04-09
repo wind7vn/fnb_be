@@ -66,8 +66,8 @@ func (h *AuthHandler) RegisterDevice(c *fiber.Ctx) error {
 }
 
 func (h *AuthHandler) GetMe(c *fiber.Ctx) error {
-	role := c.Locals("role").(string)
-	if role == "Guest" {
+	role, ok := c.Locals("role").(string)
+	if ok && role == "Guest" {
 		return response.Success(c, fiber.Map{
 			"id":           "",
 			"full_name":    "Khách hàng",
