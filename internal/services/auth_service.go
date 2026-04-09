@@ -103,3 +103,19 @@ func (s *AuthService) GetMe(userID string) (*domain.User, *errors.AppError) {
 	}
 	return user, nil
 }
+
+func (s *AuthService) GenerateGuestToken(tenantID, tableID string) (string, *errors.AppError) {
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"tenant_id": tenantID,
+		"table_id":  tableID,
+		"role":      "Guest",
+		"exp":       time.Now().Add(12 * time.Hour).Unix(),
+	})
+
+	tokenString, err := token.SignedString([]byte(config.AppConfig.JWTSecret))
+	if err != nil {
+		return "", errors.NewInternalServer(err)
+	}
+
+	return tokenString, nil
+}

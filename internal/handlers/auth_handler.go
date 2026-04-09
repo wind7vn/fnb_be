@@ -21,6 +21,7 @@ func (h *AuthHandler) SetupRoutes(router fiber.Router) {
 
 	// Public
 	authGroup.Post("/login", h.Login)
+	authGroup.Post("/guest", h.GuestLogin)
 
 	// Protected
 	authGroup.Use(middlewares.JWTMiddleware())
@@ -65,6 +66,18 @@ func (h *AuthHandler) RegisterDevice(c *fiber.Ctx) error {
 }
 
 func (h *AuthHandler) GetMe(c *fiber.Ctx) error {
+	role := c.Locals("role").(string)
+	if role == "Guest" {
+		return response.Success(c, fiber.Map{
+			"id":           "",
+			"full_name":    "Khách hàng",
+			"phone_number": "",
+			"role":         "Guest",
+			"avatar_url":   "",
+			"tenant_id":    c.Locals("tenant_id").(string),
+		})
+	}
+
 	userID := c.Locals("user_id").(string)
 
 	user, appErr := h.authService.GetMe(userID)
@@ -78,5 +91,27 @@ func (h *AuthHandler) GetMe(c *fiber.Ctx) error {
 		"phone_number": user.PhoneNumber,
 		"role":         user.Role,
 		"avatar_url":   user.AvatarURL,
+	})
+}
+
+// POST /auth/guest
+// { "tenant_id": "...", "table_id": "..." }
+func (h *AuthHandler) GuestLogin(c *fiber.Ctx) error {
+	var req struct {
+		TenantID string `json:"tenant_id"`
+		TableID  string `json:"table_id"`
+	}
+
+	if err := c.BodyParser(&req); err != nil {
+		return response.Error(c, errors.NewBadRequest(errors.ErrCodeValidationFailed, "Invalid parsing format", err))
+	}
+
+	token, appErr := h.authService.GenerateGuestToken(req.TenantID, req.TableID)
+	if appErr != nil {
+		return response.Error(c, appErr)
+	}
+
+	return response.Success(c, fiber.Map{
+		"token": token,
 	})
 }
