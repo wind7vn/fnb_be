@@ -1,10 +1,6 @@
 pipeline {
     agent any
 
-    tools {
-        go 'go'
-    }
-
     environment {
         REMOTE_IP = '172.17.0.1'
         
@@ -21,39 +17,40 @@ pipeline {
             }
         }
 
-        stage('Build Binary') {
+        stage('Package, Build & Deploy on Host') {
             steps {
-                echo "Đang build Golang CGO_ENABLED=0..."
-                sh 'CGO_ENABLED=0 GOOS=linux go build -a -o fnb_be ./cmd/server'
-            }
-        }
-
-        stage('Deploy To Host via SSH') {
-            steps {
-                echo "Đang đẩy qua Docker Gateway IP SSH ra máy Host..."
+                echo "Đóng gói mã nguồn và gửi trực tiếp sang host để build..."
                 script {
                     withCredentials([
                         file(credentialsId: 'dev-env-file', variable: 'ENV_FILE'),
                         file(credentialsId: 'dev-firebase-service-account', variable: 'FIREBASE_FILE')
                     ]) {
                         sh """
-                            # Đảm bảo thư mục tồn tại trước khi SCP
-                            ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} "mkdir -p ${DEPLOY_PATH}"
+                            # Đóng gói toàn bộ code workspace (nén tất cả)
+                            tar -czf source.tar.gz .
                             
-                            # SCP đẩy file Binary chạy
-                            scp -o StrictHostKeyChecking=no fnb_be ${REMOTE_USER}@${REMOTE_IP}:${DEPLOY_PATH}/fnb_be_new
+                            # Đảm bảo các thư mục tồn tại trên host
+                            ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} "mkdir -p ${DEPLOY_PATH}/src"
                             
-                            # SCP đẩy file .env từ Jenkins Secret sang máy Host
+                            # SCP mã nguồn nén sang Host
+                            scp -o StrictHostKeyChecking=no source.tar.gz ${REMOTE_USER}@${REMOTE_IP}:${DEPLOY_PATH}/
+                            
+                            # SCP file cấu hình sang Host
                             scp -o StrictHostKeyChecking=no \$ENV_FILE ${REMOTE_USER}@${REMOTE_IP}:${DEPLOY_PATH}/.env
-                            
-                            # SCP đẩy file Firebase service account từ Jenkins Secret sang máy Host
                             scp -o StrictHostKeyChecking=no \$FIREBASE_FILE ${REMOTE_USER}@${REMOTE_IP}:${DEPLOY_PATH}/firebase-service-account.json
                             
-                            # Xuyên thủng gọi SSH để thay đổi file và Restart systemctl
+                            # SSH sang Host để giải nén mã nguồn, build và restart
+                            # Lưu ý: nếu máy đích không nhận lệnh 'go', bạn có thể cần thay 'go' bằng '/usr/local/go/bin/go'
                             ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} "\
-                                chmod +x ${DEPLOY_PATH}/fnb_be_new && \
-                                mv -f ${DEPLOY_PATH}/fnb_be_new ${DEPLOY_PATH}/fnb_be && \
-                                sudo systemctl restart ${SERVICE_NAME} \
+                                cd ${DEPLOY_PATH} && \
+                                tar -xzf source.tar.gz -C ./src && \
+                                cd ./src && \
+                                export PATH=\\\$PATH:/usr/local/go/bin:/usr/bin && \
+                                CGO_ENABLED=0 GOOS=linux go build -a -o ../fnb_be ./cmd/server && \
+                                cd .. && \
+                                sudo systemctl restart ${SERVICE_NAME} && \
+                                rm -f source.tar.gz && \
+                                rm -rf ./src \
                             "
                         """
                     }
