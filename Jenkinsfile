@@ -16,14 +16,7 @@ pipeline {
             stages {
                 stage('Clean Workspace') {
                     steps {
-                        script {
-                            try {
-                                sh 'docker run --rm -v $(pwd):/workspace alpine rm -rf /workspace/*'
-                                sh 'docker run --rm -v $(pwd):/workspace alpine rm -rf /workspace/.*'
-                            } catch (Exception e) {
-                                cleanWs()
-                            }
-                        }
+                        cleanWs()
                     }
                 }
 
@@ -70,7 +63,30 @@ pipeline {
                                 echo "--- Moving secrets and Restarting Service via Systemd (User Mode) ---"
                                 sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} 'mv -f ${DEPLOY_PATH}/src/.env ${DEPLOY_PATH}/.env'"
                                 sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} 'mv -f ${DEPLOY_PATH}/src/firebase-service-account.json ${DEPLOY_PATH}/firebase-service-account.json'"
+                                
+                                echo "--- Auto-Creating Systemd Service File ---"
+                                sh """ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} '
+                                    mkdir -p ~/.config/systemd/user
+                                    cat > ~/.config/systemd/user/${SERVICE_NAME} << EOF
+[Unit]
+Description=FNB Backend Golang Service
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=${DEPLOY_PATH}
+ExecStart=${DEPLOY_PATH}/fnb_be
+Restart=always
+RestartSec=5
+EnvironmentFile=${DEPLOY_PATH}/.env
+
+[Install]
+WantedBy=default.target
+EOF
+                                '"""
+
                                 sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} 'systemctl --user daemon-reload'"
+                                sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} 'systemctl --user enable ${SERVICE_NAME}'"
                                 sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} 'systemctl --user restart ${SERVICE_NAME}'"
                                 
                                 echo "--- Cleaning up source folder ---"
