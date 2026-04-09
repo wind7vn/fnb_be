@@ -26,14 +26,15 @@ pipeline {
                         file(credentialsId: 'dev-firebase-service-account', variable: 'FIREBASE_FILE')
                     ]) {
                         sh """
-                            # Đóng gói toàn bộ code workspace (loại trừ file nén và thư mục .git)
-                            tar --exclude='./source.tar.gz' --exclude='./.git' -czf source.tar.gz .
+                            # Đóng gói toàn bộ code workspace (đẩy file nén ra chỗ khác để tránh lỗi changed as we read it)
+                            tar --exclude='./.git' -czf /tmp/source_fnb.tar.gz .
                             
                             # Đảm bảo các thư mục tồn tại trên host
                             ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} "mkdir -p ${DEPLOY_PATH}/src"
                             
                             # SCP mã nguồn nén sang Host
-                            scp -o StrictHostKeyChecking=no source.tar.gz ${REMOTE_USER}@${REMOTE_IP}:${DEPLOY_PATH}/
+                            scp -o StrictHostKeyChecking=no /tmp/source_fnb.tar.gz ${REMOTE_USER}@${REMOTE_IP}:${DEPLOY_PATH}/source.tar.gz
+                            rm -f /tmp/source_fnb.tar.gz
                             
                             # SCP file cấu hình sang Host
                             scp -o StrictHostKeyChecking=no \$ENV_FILE ${REMOTE_USER}@${REMOTE_IP}:${DEPLOY_PATH}/.env
