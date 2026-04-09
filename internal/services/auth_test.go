@@ -27,16 +27,23 @@ func setupTest() *services.AuthService {
 	uid, _ := uuid.NewV7()
 	user := domain.User{
 		BaseModel:    domain.BaseModel{ID: uid},
-		Role:         "Staff",
 		PhoneNumber:  "0123456789",
 		FullName:     "Test User",
 		PasswordHash: string(hashPW),
 	}
 	db.Create(&user)
 
+	member := domain.TenantMember{
+		UserID:   user.ID,
+		TenantID: tenantID,
+		Role:     "Staff",
+	}
+	db.Create(&member)
+
 	repo := repositories.NewUserRepository(db)
 	tenantRepo := repositories.NewTenantRepository(db)
-	return services.NewAuthService(repo, tenantRepo)
+	memberRepo := repositories.NewTenantMemberRepository(db)
+	return services.NewAuthService(repo, tenantRepo, memberRepo)
 }
 
 func TestLogin_Success(t *testing.T) {

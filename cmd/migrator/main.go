@@ -27,6 +27,7 @@ func main() {
 		&domain.Tenant{},
 		&domain.User{},
 		&domain.UserDevice{},
+		&domain.TenantMember{},
 		&domain.Table{},
 		&domain.Product{},
 		&domain.Order{},
@@ -41,9 +42,7 @@ func main() {
 
 	logger.Log.Info("Core Entity Schema AutoMigrate successful.")
 
-	// 4. Post-Migration: Advanced DB Constraints / Roles / RLS via Raw SQL
-	// e.g. Unique composite index: A phonenumber is unique per Tenant
-	execRawSQL(`CREATE UNIQUE INDEX IF NOT EXISTS idx_tenant_phone ON "user" (tenant_id, phone_number) WHERE tenant_id IS NOT NULL;`)
+	logger.Log.Info("Core Entity Schema AutoMigrate successful.")
 
 	logger.Log.Info("Migrations Applied Successfully!")
 }

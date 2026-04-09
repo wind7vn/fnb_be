@@ -11,10 +11,11 @@ import (
 type TenantService struct {
 	tenantRepo ports.TenantRepository
 	userRepo   ports.UserRepository
+	memberRepo ports.TenantMemberRepository
 }
 
-func NewTenantService(tenantRepo ports.TenantRepository, userRepo ports.UserRepository) *TenantService {
-	return &TenantService{tenantRepo: tenantRepo, userRepo: userRepo}
+func NewTenantService(tenantRepo ports.TenantRepository, userRepo ports.UserRepository, memberRepo ports.TenantMemberRepository) *TenantService {
+	return &TenantService{tenantRepo: tenantRepo, userRepo: userRepo, memberRepo: memberRepo}
 }
 
 type CreateTenantRequest struct {
@@ -37,23 +38,60 @@ func (s *TenantService) CreateTenant(req CreateTenantRequest) (*domain.Tenant, *
 		return nil, errors.NewInternalServer(err)
 	}
 
-	// Create Owner user
-	hashPW, _ := bcrypt.GenerateFromPassword([]byte(req.OwnerPassword), bcrypt.DefaultCost)
+	// Check if user already exists
+	owner, errUser := s.userRepo.FindByPhone(req.OwnerPhone)
+	if errUser != nil || owner == nil {
+		hashPW, _ := bcrypt.GenerateFromPassword([]byte(req.OwnerPassword), bcrypt.DefaultCost)
+		owner = &domain.User{
+			PhoneNumber:  req.OwnerPhone,
+			FullName:     req.OwnerFullName,
+			PasswordHash: string(hashPW),
+		}
 
-	owner := &domain.User{
-		TenantID:     &tenant.ID,
-		Role:         domain.RoleOwner,
-		PhoneNumber:  req.OwnerPhone,
-		FullName:     req.OwnerFullName,
-		PasswordHash: string(hashPW),
+		if err := s.userRepo.Create(owner); err != nil {
+			return nil, errors.NewInternalServer(err)
+		}
 	}
 
-	if err := s.userRepo.Create(owner); err != nil {
-		// Compensating transaction logic would be here ideally or handled by GORM Tx
+	// Create map between Owner and Tenant
+	member := &domain.TenantMember{
+		UserID:   owner.ID, // User returned from create/find
+		TenantID: tenant.ID,
+		Role:     domain.RoleOwner,
+	}
+
+	if err := s.memberRepo.Create(member); err != nil {
 		return nil, errors.NewInternalServer(err)
 	}
 
 	return tenant, nil
+}
+
+type CreateAdminRequest struct {
+	PhoneNumber string `json:"phone_number"`
+	FullName    string `json:"full_name"`
+	Password    string `json:"password"`
+}
+
+func (s *TenantService) CreateSystemAdmin(req CreateAdminRequest) (*domain.User, *errors.AppError) {
+	existing, errUser := s.userRepo.FindByPhone(req.PhoneNumber)
+	if errUser == nil && existing != nil {
+		return nil, errors.NewBadRequest(errors.ErrCodeValidationFailed, "Số điện thoại đã tồn tại", nil)
+	}
+
+	hashPW, _ := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	adminUser := &domain.User{
+		PhoneNumber:  req.PhoneNumber,
+		FullName:     req.FullName,
+		PasswordHash: string(hashPW),
+		SystemRole:   domain.SystemRoleAdmin,
+	}
+
+	if err := s.userRepo.Create(adminUser); err != nil {
+		return nil, errors.NewInternalServer(err)
+	}
+
+	return adminUser, nil
 }
 
 func (s *TenantService) GetAllTenants() ([]domain.Tenant, *errors.AppError) {
@@ -78,29 +116,55 @@ func (s *TenantService) CreateStaff(tenantID string, req CreateStaffRequest) (*d
 		return nil, errors.NewBadRequest(errors.ErrCodeValidationFailed, "Mã cửa hàng không hợp lệ", err)
 	}
 
-	hashPW, _ := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
-	
-	staff := &domain.User{
-		TenantID:     &tid,
-		Role:         req.Role, // Should validate if it's "Staff" or "Manager"
-		PhoneNumber:  req.PhoneNumber,
-		FullName:     req.FullName,
-		PasswordHash: string(hashPW),
+	// Check if user already exists
+	staff, errUser := s.userRepo.FindByPhone(req.PhoneNumber)
+	if errUser != nil || staff == nil {
+		hashPW, _ := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+		staff = &domain.User{
+			PhoneNumber:  req.PhoneNumber,
+			FullName:     req.FullName,
+			PasswordHash: string(hashPW),
+		}
+
+		if err := s.userRepo.Create(staff); err != nil {
+			return nil, errors.NewInternalServer(err)
+		}
 	}
 
-	if err := s.userRepo.Create(staff); err != nil {
+	// Map to Tenant
+	member := &domain.TenantMember{
+		UserID:   staff.ID,
+		TenantID: tid,
+		Role:     req.Role, // Should validate if it's "Staff" or "Manager"
+	}
+
+	if err := s.memberRepo.Create(member); err != nil {
 		return nil, errors.NewInternalServer(err)
 	}
 
 	return staff, nil
 }
 
-func (s *TenantService) GetStaff(tenantID string) ([]domain.User, *errors.AppError) {
-	staff, err := s.userRepo.FindStaffByTenant(tenantID)
+func (s *TenantService) GetStaff(tenantID string) ([]map[string]interface{}, *errors.AppError) {
+	members, err := s.memberRepo.FindStaffByTenant(tenantID)
 	if err != nil {
 		return nil, errors.NewInternalServer(err)
 	}
-	return staff, nil
+
+	var results []map[string]interface{}
+	for _, m := range members {
+		user, _ := s.userRepo.FindByID(m.UserID.String())
+		if user != nil {
+			results = append(results, map[string]interface{}{
+				"id":           user.ID,
+				"phone_number": user.PhoneNumber,
+				"full_name":    user.FullName,
+				"role":         m.Role,
+			})
+		}
+	}
+
+	return results, nil
 }
 
 type UpdateSettingsRequest struct {

@@ -81,23 +81,20 @@ func (h *AuthHandler) GetMe(c *fiber.Ctx) error {
 	}
 
 	userID := c.Locals("user_id").(string)
+	tenantID, _ := c.Locals("tenant_id").(string)
 
 	user, appErr := h.authService.GetMe(userID)
 	if appErr != nil {
 		return response.Error(c, appErr)
 	}
 
-	var tenantID string
-	if user.TenantID != nil {
-		tenantID = user.TenantID.String()
-	}
-
 	return response.Success(c, fiber.Map{
 		"id":           user.ID,
 		"full_name":    user.FullName,
 		"phone_number": user.PhoneNumber,
-		"role":         user.Role,
 		"avatar_url":   user.AvatarURL,
+		"role":         role,
+		"system_role":  string(user.SystemRole),
 		"tenant_id":    tenantID,
 	})
 }

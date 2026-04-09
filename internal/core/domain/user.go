@@ -7,19 +7,24 @@ import (
 	"gorm.io/datatypes"
 )
 
+// SystemRole definitions for Global Permissions
+type SystemRole string
+
+const (
+	SystemRoleUser      SystemRole = "user"
+	SystemRoleAdmin     SystemRole = "admin"
+	SystemRoleSuperuser SystemRole = "superuser"
+)
+
 // User maps to employee mappings (Admin, Owner, Manager, Staff)
 type User struct {
 	BaseModel
-	TenantID     *uuid.UUID `gorm:"type:uuid;index" json:"tenant_id"` // Nullable for Superadmin
-	Role         string     `gorm:"type:varchar(50);not null" json:"role"`
-	PhoneNumber  string     `gorm:"type:varchar(20);not null;index" json:"phone_number"` // Login ID
-	FullName     string     `gorm:"type:varchar(255);not null" json:"full_name"`
-	AvatarURL    string     `gorm:"type:varchar(500)" json:"avatar_url"`
-	PasswordHash string     `gorm:"type:varchar(255);not null" json:"-"` // Omit on output
-	Metadata     datatypes.JSON     `gorm:"type:jsonb" json:"metadata"`
-
-	// Associations constraint: A phone number should be unique INSIDE a specific Tenant.
-	// That constraint should be implemented in DB Migration via unique composite index (tenant_id, phone_number).
+	PhoneNumber  string         `gorm:"type:varchar(20);not null;uniqueIndex" json:"phone_number"` // Login ID globally unique
+	FullName     string         `gorm:"type:varchar(255);not null" json:"full_name"`
+	AvatarURL    string         `gorm:"type:varchar(500)" json:"avatar_url"`
+	PasswordHash string         `gorm:"type:varchar(255);not null" json:"-"` // Omit on output
+	SystemRole   SystemRole     `gorm:"type:varchar(20);not null;default:'user'" json:"system_role"`
+	Metadata     datatypes.JSON `gorm:"type:jsonb" json:"metadata"`
 }
 
 // UserDevice tracks push notification tokens (FCM/APNS) for the employee's active device

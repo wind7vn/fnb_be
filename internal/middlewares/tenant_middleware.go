@@ -10,13 +10,15 @@ import (
 // TenantMiddleware isolates sandbox contexts. It intercepts requests ensuring standard roles cannot bypass tenant_id.
 func TenantMiddleware() fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		role, okRole := c.Locals("role").(string)
+		_, okRole := c.Locals("role").(string)
 		if !okRole {
 			return c.Status(401).JSON(errors.NewUnauthorized(errors.ErrCodeUnauthorized, "Missing role claim", nil))
 		}
 
+		systemRole, _ := c.Locals("system_role").(string)
+
 		// Superadmin and Admin operate globally. Tenant filtering is optional or bypassed.
-		if role == domain.RoleSuperadmin || role == domain.RoleAdmin {
+		if systemRole == string(domain.SystemRoleSuperuser) || systemRole == string(domain.SystemRoleAdmin) {
 			return c.Next()
 		}
 

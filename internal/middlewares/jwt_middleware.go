@@ -11,10 +11,11 @@ import (
 
 // UserClaims defines the payload inside the JWT Token
 type UserClaims struct {
-	UserID   string `json:"user_id"`
-	TenantID string `json:"tenant_id"` // Empty if Superadmin
-	Role     string `json:"role"`
-	TableID  string `json:"table_id,omitempty"` // For Guest QR tokens
+	UserID     string `json:"user_id"`
+	TenantID   string `json:"tenant_id"` // Empty if Superadmin
+	Role       string `json:"role"`
+	SystemRole string `json:"system_role"`
+	TableID    string `json:"table_id,omitempty"` // For Guest QR tokens
 	jwt.RegisteredClaims
 }
 
@@ -51,6 +52,7 @@ func JWTMiddleware() fiber.Handler {
 		// Inject Claims into Locals for subsequent middlewares
 		c.Locals("user_id", claims.UserID)
 		c.Locals("role", claims.Role)
+		c.Locals("system_role", claims.SystemRole)
 		c.Locals("tenant_id", claims.TenantID)
 		if claims.TableID != "" {
 			c.Locals("table_id", claims.TableID)

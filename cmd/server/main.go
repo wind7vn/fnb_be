@@ -6,6 +6,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/wind7vn/fnb_be/internal/core/domain"
 	"github.com/wind7vn/fnb_be/internal/handlers"
 	"github.com/wind7vn/fnb_be/internal/repositories"
 	"github.com/wind7vn/fnb_be/internal/services"
@@ -29,6 +30,7 @@ func main() {
 
 	// 3. Connect DB
 	db.ConnectDB()
+	db.DB.AutoMigrate(&domain.User{}, &domain.Tenant{}, &domain.TenantMember{})
 	cache.ConnectRedis()
 
 	// 4. Initialize Fiber App
@@ -42,20 +44,23 @@ func main() {
 
 	// Add CORS middleware to allow FE to connect
 	app.Use(cors.New(cors.Config{
-		AllowOrigins:     "https://fnb-dev.windai.online, https://windai.online, http://localhost:8080",
+		AllowOrigins:     "*",
 		AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
 		AllowMethods:     "GET, POST, HEAD, PUT, DELETE, PATCH, OPTIONS",
-		AllowCredentials: true,
+		AllowCredentials: false,
 	}))
 
 	// --- Dependency Injection Engine --- //
 	userRepo := repositories.NewUserRepository(db.DB)
-	authService := services.NewAuthService(userRepo)
+	tenantRepo := repositories.NewTenantRepository(db.DB)
+	memberRepo := repositories.NewTenantMemberRepository(db.DB)
+	
+	authService := services.NewAuthService(userRepo, tenantRepo, memberRepo)
 	authHandler := handlers.NewAuthHandler(authService)
 
-	tenantRepo := repositories.NewTenantRepository(db.DB)
-	tenantService := services.NewTenantService(tenantRepo, userRepo)
-	tenantHandler := handlers.NewTenantHandler(tenantService)
+	aiService := services.NewAIService(config.AppConfig.GeminiApiKey)
+	tenantService := services.NewTenantService(tenantRepo, userRepo, memberRepo)
+	tenantHandler := handlers.NewTenantHandler(tenantService, aiService)
 
 	productRepo := repositories.NewProductRepository(db.DB)
 	productService := services.NewProductService(productRepo)
@@ -100,7 +105,12 @@ func main() {
 	// Lấy từ .env nếu có, ngược lại lấy thư mục web ở cạnh file chạy
 	webDir := os.Getenv("WEB_DIR")
 	if webDir == "" {
-		webDir = "./web" // Fallback khi chạy trên server
+		if config.AppConfig.Env == "development" || config.AppConfig.Env == "" {
+			// Point to frontend build folder for local development
+			webDir = "../fnb_ui/build/web" 
+		} else {
+			webDir = "./web" // Fallback khi chạy trên production server
+		}
 	}
 
 	if _, err := os.Stat(webDir); err == nil {

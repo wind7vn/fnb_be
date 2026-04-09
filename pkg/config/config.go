@@ -36,6 +36,9 @@ type Config struct {
 
 	// PUSH
 	FirebaseServiceAccountPath string `mapstructure:"FIREBASE_SERVICE_ACCOUNT_PATH"`
+
+	// AI
+	GeminiApiKey string `mapstructure:"GEMINI_API_KEY"`
 }
 
 var AppConfig Config
