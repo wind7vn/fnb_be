@@ -64,26 +64,9 @@ pipeline {
                                 sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} 'mv -f ${DEPLOY_PATH}/src/.env ${DEPLOY_PATH}/.env'"
                                 sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} 'mv -f ${DEPLOY_PATH}/src/firebase-service-account.json ${DEPLOY_PATH}/firebase-service-account.json'"
                                 
-                                echo "--- Auto-Creating Systemd Service File ---"
-                                sh """ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} '
-                                    mkdir -p ~/.config/systemd/user
-                                    cat > ~/.config/systemd/user/${SERVICE_NAME} << EOF
-[Unit]
-Description=FNB Backend Golang Service
-After=network.target
-
-[Service]
-Type=simple
-WorkingDirectory=${DEPLOY_PATH}
-ExecStart=${DEPLOY_PATH}/fnb_be
-Restart=always
-RestartSec=5
-EnvironmentFile=${DEPLOY_PATH}/.env
-
-[Install]
-WantedBy=default.target
-EOF
-                                '"""
+                                echo "--- Setting up Systemd Service File ---"
+                                sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} 'mkdir -p ~/.config/systemd/user'"
+                                sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} 'cp -f ${DEPLOY_PATH}/src/deploy/${SERVICE_NAME} ~/.config/systemd/user/${SERVICE_NAME}'"
 
                                 sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} 'systemctl --user daemon-reload'"
                                 sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} 'systemctl --user enable ${SERVICE_NAME}'"
@@ -91,6 +74,10 @@ EOF
                                 
                                 echo "--- Cleaning up source folder ---"
                                 sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} 'rm -rf ${DEPLOY_PATH}/src'"
+
+                                echo "--- Verify Deployment Status ---"
+                                sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} 'sleep 3 && systemctl --user is-active ${SERVICE_NAME} || { echo \"CRITICAL: Dịch vụ đã Crash ngay khi khởi động!\"; journalctl --user -u ${SERVICE_NAME} -n 50 --no-pager; exit 1; }'"
+                                sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} 'journalctl --user -u ${SERVICE_NAME} -n 15 --no-pager'"
                             }
                         }
                     }

@@ -1,0 +1,14 @@
+[Unit]
+Description=FNB Backend Golang Service
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/wind/fnb
+ExecStart=/home/wind/fnb/fnb_be
+Restart=always
+RestartSec=5
+EnvironmentFile=/home/wind/fnb/.env
+
+[Install]
+WantedBy=default.target
