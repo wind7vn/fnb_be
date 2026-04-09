@@ -67,10 +67,11 @@ pipeline {
                                 echo "--- Building Golang on target ---"
                                 sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} 'cd ${DEPLOY_PATH}/src && export PATH=\\$PATH:/usr/local/go/bin:/usr/bin && CGO_ENABLED=0 GOOS=linux go build -a -o ../fnb_be ./cmd/server'"
                                 
-                                echo "--- Moving secrets and Restarting Service via Systemd ---"
+                                echo "--- Moving secrets and Restarting Service via Systemd (User Mode) ---"
                                 sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} 'mv -f ${DEPLOY_PATH}/src/.env ${DEPLOY_PATH}/.env'"
                                 sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} 'mv -f ${DEPLOY_PATH}/src/firebase-service-account.json ${DEPLOY_PATH}/firebase-service-account.json'"
-                                sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} 'sudo systemctl restart ${SERVICE_NAME}'"
+                                sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} 'systemctl --user daemon-reload'"
+                                sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} 'systemctl --user restart ${SERVICE_NAME}'"
                                 
                                 echo "--- Cleaning up source folder ---"
                                 sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} 'rm -rf ${DEPLOY_PATH}/src'"
