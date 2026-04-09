@@ -85,12 +85,18 @@ func (h *AuthHandler) GetMe(c *fiber.Ctx) error {
 		return response.Error(c, appErr)
 	}
 
+	var tenantID string
+	if user.TenantID != nil {
+		tenantID = user.TenantID.String()
+	}
+
 	return response.Success(c, fiber.Map{
 		"id":           user.ID,
 		"full_name":    user.FullName,
 		"phone_number": user.PhoneNumber,
 		"role":         user.Role,
 		"avatar_url":   user.AvatarURL,
+		"tenant_id":    tenantID,
 	})
 }
 

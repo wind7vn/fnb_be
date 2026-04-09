@@ -169,6 +169,15 @@ func (s *OrderService) AddItems(tenantID string, orderID string, sessionID strin
 		return nil, errors.NewInternalServer(err)
 	}
 
+	// Đảm bảo Table luôn Occupied nếu có đơn thêm món
+	if order.TableID != nil {
+		table, errTable := s.tableRepo.FindByID(order.TableID.String(), tenantID)
+		if errTable == nil && table.Status != "Occupied" {
+			table.Status = "Occupied"
+			_ = s.tableRepo.Update(table)
+		}
+	}
+
 	if s.pubSub != nil {
 		_ = s.pubSub.PublishEvent("KDS_EVENTS", EventPayload{
 			TenantID: tenantID,
