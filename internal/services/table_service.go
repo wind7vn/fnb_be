@@ -18,6 +18,7 @@ func NewTableService(r ports.TableRepository) *TableService {
 
 type TableRequest struct {
 	Name   string `json:"name"`
+	Zone   string `json:"zone"`
 	Status string `json:"status"` // Available, Occupied, Reserved
 }
 
@@ -30,6 +31,7 @@ func (s *TableService) Create(tenantID string, req TableRequest) (*domain.Table,
 	table := &domain.Table{
 		TenantID: tid,
 		Name:     req.Name,
+		Zone:     req.Zone,
 		Status:   req.Status,
 	}
 
