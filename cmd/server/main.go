@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/wind7vn/fnb_be/internal/handlers"
 	"github.com/wind7vn/fnb_be/internal/repositories"
 	"github.com/wind7vn/fnb_be/internal/services"
@@ -38,6 +39,14 @@ func main() {
 			return response.Error(c, errors.NewInternalServer(err))
 		},
 	})
+
+	// Add CORS middleware to allow FE to connect
+	app.Use(cors.New(cors.Config{
+		AllowOrigins:     "*", // Trong môi trường thật có thể set "https://yourfrontend.com"
+		AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
+		AllowMethods:     "GET, POST, HEAD, PUT, DELETE, PATCH, OPTIONS",
+		AllowCredentials: true,
+	}))
 
 	// --- Dependency Injection Engine --- //
 	userRepo := repositories.NewUserRepository(db.DB)
@@ -88,13 +97,21 @@ func main() {
 	})
 
 	// 5. Serve Flutter Web Static Files
-	webDir := "/Users/wind/projects/fnb_ui/build/web"
+	// Lấy từ .env nếu có, ngược lại lấy thư mục web ở cạnh file chạy
+	webDir := os.Getenv("WEB_DIR")
+	if webDir == "" {
+		webDir = "./web" // Fallback khi chạy trên server
+	}
+
 	if _, err := os.Stat(webDir); err == nil {
+		logger.Log.Info("Serving Flutter App from: " + webDir)
 		app.Static("/", webDir)
 		// Fallback for Flutter Router (must be AFTER API routes)
 		app.Get("/*", func(c *fiber.Ctx) error {
 			return c.SendFile(webDir + "/index.html")
 		})
+	} else {
+		logger.Log.Warn("Static web directory not found: " + webDir)
 	}
 
 	// Start server on defined port or default to 8080
