@@ -43,6 +43,8 @@ func main() {
 	})
 
 	// Add CORS middleware to allow FE to connect
+	app.Static("/uploads", "./uploads")
+
 	app.Use(cors.New(cors.Config{
 		AllowOrigins:     "*",
 		AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
@@ -94,6 +96,8 @@ func main() {
 	systemHandler.SetupRoutes(v1)
 
 	// Setup basic ping route
+	v1.Post("/upload", handlers.UploadImage)
+
 	v1.Get("/health", func(c *fiber.Ctx) error {
 		return response.Success(c, map[string]string{
 			"status":  "ok",

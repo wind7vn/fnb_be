@@ -122,6 +122,11 @@ func (h *AuthHandler) GuestLogin(c *fiber.Ctx) error {
 }
 
 func (h *AuthHandler) GetMyTenants(c *fiber.Ctx) error {
+	role, ok := c.Locals("role").(string)
+	if ok && role == "Guest" {
+		return response.Success(c, []interface{}{})
+	}
+
 	userID := c.Locals("user_id").(string)
 
 	tenants, appErr := h.authService.GetMyTenants(userID)

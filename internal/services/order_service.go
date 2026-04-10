@@ -1,6 +1,7 @@
 package services
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -184,6 +185,25 @@ func (s *OrderService) AddItems(tenantID string, orderID string, sessionID strin
 			Type:     domain.EventOrderCreated,
 			Data:     order, // Send full updated order roughly
 		})
+	}
+
+	if s.system != nil {
+		itemCount := len(items)
+		tableName := ""
+		if order.TableID != nil {
+			if t, err := s.tableRepo.FindByID(order.TableID.String(), tenantID); err == nil {
+				tableName = t.Name
+			}
+		}
+		
+		s.system.CreateNotification(
+			tenantID,
+			"", // Broadcast
+			"Có khách gọi món mới",
+			fmt.Sprintf("Bàn %s vừa đặt thêm %d món.", tableName, itemCount),
+			domain.NotiTypeNewOrder,
+			map[string]interface{}{"order_id": order.ID.String(), "table_id": tableName},
+		)
 	}
 
 	return order, nil

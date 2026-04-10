@@ -32,6 +32,7 @@ func (s *TenantService) CreateTenant(req CreateTenantRequest) (*domain.Tenant, *
 		Name:     req.Name,
 		Timezone: req.Timezone,
 		IsActive: true,
+		Metadata: "{}", // Phải là JSON hợp lệ, tránh lỗi postgres jsonb
 	}
 
 	if err := s.tenantRepo.Create(tenant); err != nil {

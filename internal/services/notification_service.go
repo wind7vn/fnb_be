@@ -20,8 +20,16 @@ type NotificationService struct {
 func NewNotificationService() *NotificationService {
 	credentialPath := config.AppConfig.FirebaseServiceAccountPath
 	if credentialPath == "" {
-		// Fallback xuống relative config nếu thiếu env var
-		credentialPath = "configs/fnb-2026-firebase-adminsdk-fbsvc-049b24c831.json"
+		fallbacks := []string{
+			"firebase-service-account.json",
+			"configs/firebase-service-account.json",
+		}
+		for _, p := range fallbacks {
+			if _, err := os.Stat(p); err == nil {
+				credentialPath = p
+				break
+			}
+		}
 	}
 
 	if _, err := os.Stat(credentialPath); os.IsNotExist(err) {
