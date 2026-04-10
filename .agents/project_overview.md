@@ -17,8 +17,13 @@ A robust, Multi-Tenant Food & Beverage Management System (POS + Kitchen Display 
 - **Standardized WS Events**: `TABLE_STATUS_CHANGED`, `ORDER_CREATED`, `KDS_NEW_TICKET`, `KDS_ITEM_READY`, `PAYMENT_COMPLETED`.
 
 ## 4. Nuanced API Endpoints Context
-- `POST /system/users`: Superadmin initializes an Owner.
-- `POST /tenants/users`: Owners spin up local `Manager` or `Staff` accounts.
+- `POST /system/admins`: Superadmin creates a Global Admin account.
+- `POST /system/tenants`: Global Admin initializes a system Tenant & Owner.
+- `POST /tenant/staff`: Owners spin up local `Manager` or `Staff` accounts.
 - `POST /orders/guest`: Tokenless customer QR orders leveraging generated `Guest Token`.
 - `PUT /auth/me`: Independent user profile management.
 - `POST /auth/devices`: Devices register their Push Token / FCM ID here.
+
+## 5. Database Utilities (GORM)
+- **Migrator** (`cmd/migrator`): `go run cmd/migrator/main.go` -> Safely adds missing tables, columns, and constraints natively via GORM AutoMigrate. Never drops/deletes columns automatically.
+- **Cleanup** (`cmd/cleanup`): `go run cmd/cleanup/main.go` -> Specifically engineered reflection-script that compares struct `Schema.Fields` against DB `ColumnTypes()`. Safely `DropColumn`s everything that has been unmapped/deleted in Go code to prune structural waste.

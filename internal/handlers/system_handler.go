@@ -2,14 +2,16 @@ package handlers
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
 	"github.com/wind7vn/fnb_be/internal/core/domain"
 	"github.com/wind7vn/fnb_be/internal/middlewares"
 	"github.com/wind7vn/fnb_be/internal/services"
 	"github.com/wind7vn/fnb_be/pkg/common/errors"
 	"github.com/wind7vn/fnb_be/pkg/common/response"
-	"github.com/google/uuid"
+	"github.com/wind7vn/fnb_be/pkg/config"
 )
 
 type SystemHandler struct {
@@ -22,6 +24,10 @@ func NewSystemHandler(svc *services.SystemService) *SystemHandler {
 
 func (h *SystemHandler) SetupRoutes(router fiber.Router) {
 	group := router.Group("/system")
+
+	// Public Config Route
+	group.Get("/configs", h.GetClientConfigs)
+
 	group.Use(middlewares.JWTMiddleware())
 	group.Use(middlewares.TenantMiddleware())
 
@@ -33,6 +39,9 @@ func (h *SystemHandler) SetupRoutes(router fiber.Router) {
 
 	// Action Logs
 	group.Get("/action-logs", middlewares.RolesAllowed(domain.RoleOwner, domain.RoleManager), h.GetActionLogs)
+
+	// Banks Configuration
+	group.Get("/banks", middlewares.RolesAllowed(domain.RoleOwner, domain.RoleManager, domain.RoleStaff), h.GetBanks)
 }
 
 func (h *SystemHandler) CallStaff(c *fiber.Ctx) error {
@@ -107,3 +116,38 @@ func (h *SystemHandler) GetActionLogs(c *fiber.Ctx) error {
 
 	return response.Success(c, logs)
 }
+
+func (h *SystemHandler) GetClientConfigs(c *fiber.Ctx) error {
+	domainUrl := config.AppConfig.AppDomain
+	if domainUrl == "" {
+		domainUrl = "http://localhost:8080"
+	}
+
+	wsUrl := strings.Replace(domainUrl, "https://", "wss://", 1)
+	wsUrl = strings.Replace(wsUrl, "http://", "ws://", 1)
+
+	configs := map[string]interface{}{
+		"base_url":               domainUrl,
+		"api_base_url":           domainUrl + "/api/v1",
+		"socket_base_url":        wsUrl + "/api/v1/ws",
+		"term_url":               domainUrl + "/support/terms-of-service",
+		"privacy_url":            domainUrl + "/support/privacy-policy",
+		"phone_center":           "19001234",
+		"max_wait_pong":          2000,
+		"max_delay_ping":         10000,
+		"check_net_domain":       "https://www.google.com",
+		"max_delay_check_net":    5000,
+		"max_recent_destination": 7,
+	}
+
+	return c.JSON(configs)
+}
+
+func (h *SystemHandler) GetBanks(c *fiber.Ctx) error {
+	banks, err := h.svc.GetSupportedBanks()
+	if err != nil {
+		return response.Error(c, err)
+	}
+	return response.Success(c, banks)
+}
+

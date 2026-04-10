@@ -1,7 +1,9 @@
 package services
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -11,6 +13,7 @@ import (
 	"github.com/wind7vn/fnb_be/pkg/common/errors"
 	"github.com/wind7vn/fnb_be/pkg/common/logger"
 	"github.com/wind7vn/fnb_be/pkg/config"
+	"github.com/wind7vn/fnb_be/pkg/bankqr"
 	"gorm.io/gorm"
 )
 
@@ -18,12 +21,13 @@ type OrderService struct {
 	orderRepo   ports.OrderRepository
 	productRepo ports.ProductRepository
 	tableRepo   ports.TableRepository
+	tenantRepo  ports.TenantRepository
 	pubSub      *PubSubService
 	system      *SystemService
 }
 
-func NewOrderService(order ports.OrderRepository, product ports.ProductRepository, table ports.TableRepository, ps *PubSubService, sys *SystemService) *OrderService {
-	return &OrderService{orderRepo: order, productRepo: product, tableRepo: table, pubSub: ps, system: sys}
+func NewOrderService(order ports.OrderRepository, product ports.ProductRepository, table ports.TableRepository, tenant ports.TenantRepository, ps *PubSubService, sys *SystemService) *OrderService {
+	return &OrderService{orderRepo: order, productRepo: product, tableRepo: table, tenantRepo: tenant, pubSub: ps, system: sys}
 }
 
 type OpenSessionRequest struct {
@@ -277,7 +281,7 @@ func (s *OrderService) UpdateItemStatus(tenantID string, itemID string, status s
 		})
 	}
 
-	if status == domain.OrderStatusReady && s.system != nil {
+	if status == string(domain.OrderStatusReady) && s.system != nil {
 		s.system.CreateNotification(
 			tenantID,
 			"", // Assuming broadcast to tenant initially
@@ -289,4 +293,87 @@ func (s *OrderService) UpdateItemStatus(tenantID string, itemID string, status s
 	}
 
 	return nil
+}
+
+func (s *OrderService) GenerateBankQR(tenantID, orderID string) (map[string]interface{}, *errors.AppError) {
+	order, err := s.orderRepo.FindByID(orderID, tenantID)
+	if err != nil {
+		return nil, errors.NewBadRequest(errors.ErrCodeValidationFailed, "Không tìm thấy hoá đơn này", err)
+	}
+
+	totalAmount := 0.0
+	for _, item := range order.Items {
+		totalAmount += float64(item.Price) * float64(item.Quantity)
+	}
+
+	// 2. Fetch Tenant Config (Bank info)
+	tenant, errTenant := s.tenantRepo.FindByID(tenantID)
+	if errTenant != nil || tenant == nil {
+		return nil, errors.NewInternalServer(fmt.Errorf("lỗi lấy thông tin cửa hàng: %v", errTenant))
+	}
+
+	// Extract bank info from JSON metadata
+	bankBin := ""
+	bankAccount := ""
+	accountName := ""
+	
+	if tenant.Metadata != "" {
+		var meta map[string]interface{}
+		_ = json.Unmarshal([]byte(tenant.Metadata), &meta)
+		if val, ok := meta["bank_bin"].(string); ok {
+			bankBin = val
+		}
+		if val, ok := meta["bank_account"].(string); ok {
+			bankAccount = val
+		}
+		if val, ok := meta["account_name"].(string); ok {
+			accountName = val
+		}
+	}
+
+	if bankBin == "" || bankAccount == "" {
+		return nil, errors.NewBadRequest(errors.ErrCodeValidationFailed, "Cửa hàng chưa cấu hình số tài khoản ngân hàng. Vui lòng thiết lập ở trang Cài đặt", nil)
+	}
+
+	message := fmt.Sprintf("Thanh toan don %s", orderID[len(orderID)-6:])
+
+	// Generate QR Base64 locally natively!
+	qrString, errQR := bankqr.GenerateBase64QR(bankBin, bankAccount, int(totalAmount), message)
+	if errQR != nil {
+		return nil, errors.NewInternalServer(fmt.Errorf("lỗi tạo mã QR: %v", errQR))
+	}
+
+	// Lấy thông tin logo và bank name từ momo_banks.json
+	bankName := bankBin
+	bankLogo := ""
+	if bodyBytes, err := os.ReadFile("./data/momo_banks.json"); err == nil {
+		var momoData map[string]struct {
+			Bin         string `json:"bin"`
+			ShortName   string `json:"shortName"`
+			BankLogoUrl string `json:"bankLogoUrl"`
+		}
+		if json.Unmarshal(bodyBytes, &momoData) == nil {
+			for _, b := range momoData {
+				// bankBin in DB might look like "970422" but in momo_banks.json it can be "970437, 970420"
+				// A simple strings.Contains is safer or direct exact match
+				bBin := b.Bin
+				if bBin == bankBin || (len(bBin) > 5 && bBin[:6] == bankBin[:6]) {
+					bankName = b.ShortName
+					bankLogo = config.AppConfig.AppDomain + b.BankLogoUrl
+					break
+				}
+			}
+		}
+	}
+
+	return map[string]interface{}{
+		"amount":       int(totalAmount),
+		"bank_bin":     bankBin,
+		"bank_account": bankAccount,
+		"account_name": accountName,
+		"bank_name":    bankName,
+		"bank_logo":    bankLogo,
+		"message":      message,
+		"qr_string":    qrString, 
+	}, nil
 }

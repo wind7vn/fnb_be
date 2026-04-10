@@ -17,7 +17,7 @@ func TestOrderCartCalculations(t *testing.T) {
 	orderRepo := repositories.NewOrderRepository(db)
 	productRepo := repositories.NewProductRepository(db)
 	tableRepo := repositories.NewTableRepository(db)
-	svc := services.NewOrderService(orderRepo, productRepo, tableRepo, nil, nil)
+	svc := services.NewOrderService(orderRepo, productRepo, tableRepo, nil, nil, nil)
 
 	tenantID, _ := uuid.NewV7()
 	tableID, _ := uuid.NewV7()

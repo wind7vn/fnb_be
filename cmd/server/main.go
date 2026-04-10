@@ -44,6 +44,7 @@ func main() {
 
 	// Add CORS middleware to allow FE to connect
 	app.Static("/uploads", "./uploads")
+	app.Static("/bank_icons", "./web/bank_icons")
 
 	app.Use(cors.New(cors.Config{
 		AllowOrigins:     "*",
@@ -79,7 +80,7 @@ func main() {
 	pubSubService := services.NewPubSubService()
 	pushNotiService := services.NewNotificationService()
 	systemService := services.NewSystemService(actionLogRepo, notiRepo, pushNotiService)
-	orderService := services.NewOrderService(orderRepo, productRepo, tableRepo, pubSubService, systemService)
+	orderService := services.NewOrderService(orderRepo, productRepo, tableRepo, tenantRepo, pubSubService, systemService)
 	orderHandler := handlers.NewOrderHandler(orderService)
 	systemHandler := handlers.NewSystemHandler(systemService)
 

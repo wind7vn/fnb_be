@@ -8,9 +8,10 @@ import (
 
 type Config struct {
 	// Server
-	Port    string `mapstructure:"PORT"`
-	Env     string `mapstructure:"ENV"`
-	AppName string `mapstructure:"APP_NAME"`
+	Port      string `mapstructure:"PORT"`
+	Env       string `mapstructure:"ENV"`
+	AppName   string `mapstructure:"APP_NAME"`
+	AppDomain string `mapstructure:"APP_DOMAIN"`
 
 	// Database
 	DBHost         string `mapstructure:"DB_HOST"`

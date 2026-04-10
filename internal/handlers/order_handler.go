@@ -40,6 +40,9 @@ func (h *OrderHandler) SetupRoutes(router fiber.Router) {
 
 	// KDS specific updating Endpoint
 	orderGroup.Put("/items/:itemId/status", middlewares.RolesAllowed(domain.RoleOwner, domain.RoleManager, domain.RoleStaff), h.UpdateItemStatus)
+
+	// Generate Payment QR from Order
+	orderGroup.Get("/:id/bankqr", middlewares.RolesAllowed(domain.RoleOwner, domain.RoleManager, domain.RoleStaff, "Guest"), h.GenerateBankQR)
 }
 
 func (h *OrderHandler) GetActiveOrderByTable(c *fiber.Ctx) error {
@@ -188,4 +191,16 @@ func (h *OrderHandler) UpdateItemStatus(c *fiber.Ctx) error {
 	}
 
 	return response.Success(c, nil)
+}
+
+func (h *OrderHandler) GenerateBankQR(c *fiber.Ctx) error {
+	tenantID := c.Locals("tenant_id").(string)
+	orderID := c.Params("id")
+
+	qrData, appErr := h.svc.GenerateBankQR(tenantID, orderID)
+	if appErr != nil {
+		return response.Error(c, appErr)
+	}
+
+	return response.Success(c, qrData)
 }

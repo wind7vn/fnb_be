@@ -2,11 +2,15 @@ package services
 
 import (
 	"encoding/json"
+	"fmt"
+	"os"
+	"sort"
 
 	"github.com/google/uuid"
 	"github.com/wind7vn/fnb_be/internal/core/domain"
 	"github.com/wind7vn/fnb_be/internal/core/ports"
 	"github.com/wind7vn/fnb_be/pkg/common/errors"
+	"github.com/wind7vn/fnb_be/pkg/config"
 	"gorm.io/datatypes"
 )
 
@@ -79,6 +83,64 @@ func (s *SystemService) MarkAllRead(tenantID string) *errors.AppError {
 		return errors.NewInternalServer(err)
 	}
 	return nil
+}
+
+type BankMapping struct {
+	ID          string `json:"id"`
+	Bin         string `json:"bin"`
+	ShortName   string `json:"short_name"`
+	Name        string `json:"name"`
+	BankLogoURL string `json:"logo_url"`
+	IsBankQr    bool   `json:"is_bank_qr"`
+}
+
+var cachedBanks []BankMapping
+
+func (s *SystemService) GetSupportedBanks() ([]BankMapping, *errors.AppError) {
+	if len(cachedBanks) > 0 {
+		return cachedBanks, nil
+	}
+
+	// Đọc tệp JSON gốc đã được pull về máy
+	bodyBytes, err := os.ReadFile("./data/momo_banks.json")
+	if err != nil {
+		// Thử tìm ở thư mục cha nếu chạy lệnh từ thư mục con (ví dụ cmd_server)
+		bodyBytes, err = os.ReadFile("../data/momo_banks.json")
+		if err != nil {
+			return nil, errors.NewInternalServer(fmt.Errorf("không thể tìm thấy file cấu hình ngân hàng: %v", err))
+		}
+	}
+
+	var momoData map[string]struct {
+		Bin         string `json:"bin"`
+		ShortName   string `json:"shortName"`
+		Name        string `json:"name"`
+		BankLogoUrl string `json:"bankLogoUrl"`
+		IsBankQr    bool   `json:"isBankQr"`
+	}
+
+	if err := json.Unmarshal(bodyBytes, &momoData); err != nil {
+		return nil, errors.NewInternalServer(err)
+	}
+
+	var results []BankMapping
+	for id, bank := range momoData {
+		results = append(results, BankMapping{
+			ID:          id,
+			Bin:         bank.Bin,
+			ShortName:   bank.ShortName,
+			Name:        bank.Name,
+			BankLogoURL: config.AppConfig.AppDomain + bank.BankLogoUrl,
+			IsBankQr:    bank.IsBankQr,
+		})
+	}
+
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].ShortName < results[j].ShortName
+	})
+
+	cachedBanks = results
+	return results, nil
 }
 
 // CreateNotification saves to DB and asynchronously pushes via FCM or Redis
