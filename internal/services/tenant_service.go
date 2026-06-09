@@ -192,3 +192,53 @@ func (s *TenantService) GetSettings(tenantID string) (string, *errors.AppError) 
 	}
 	return tenant.Metadata, nil
 }
+
+type UpdateStaffRequest struct {
+	FullName    string  `json:"full_name"`
+	PhoneNumber string  `json:"phone_number"`
+	Role        string  `json:"role"`
+	Password    *string `json:"password,omitempty"`
+}
+
+func (s *TenantService) UpdateStaff(tenantID string, staffUserID string, req UpdateStaffRequest) *errors.AppError {
+	// Check staff member in tenant
+	member, err := s.memberRepo.FindByUserAndTenant(staffUserID, tenantID)
+	if err != nil {
+		return errors.NewBadRequest(errors.ErrCodeValidationFailed, "Nhân viên không thuộc cửa hàng này", err)
+	}
+
+	user, err := s.userRepo.FindByID(staffUserID)
+	if err != nil {
+		return errors.NewBadRequest(errors.ErrCodeValidationFailed, "Không tìm thấy tài khoản nhân viên", err)
+	}
+
+	if req.FullName != "" {
+		user.FullName = req.FullName
+	}
+
+	if req.PhoneNumber != "" {
+		existing, errPhone := s.userRepo.FindByPhone(req.PhoneNumber)
+		if errPhone == nil && existing != nil && existing.ID != user.ID {
+			return errors.NewBadRequest(errors.ErrCodeValidationFailed, "Số điện thoại đã được sử dụng bởi tài khoản khác", nil)
+		}
+		user.PhoneNumber = req.PhoneNumber
+	}
+
+	if req.Password != nil && *req.Password != "" {
+		hashPW, _ := bcrypt.GenerateFromPassword([]byte(*req.Password), bcrypt.DefaultCost)
+		user.PasswordHash = string(hashPW)
+	}
+
+	if err := s.userRepo.Update(user); err != nil {
+		return errors.NewInternalServer(err)
+	}
+
+	if req.Role != "" {
+		member.Role = req.Role
+		if err := s.memberRepo.Update(member); err != nil {
+			return errors.NewInternalServer(err)
+		}
+	}
+
+	return nil
+}

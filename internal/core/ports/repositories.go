@@ -11,10 +11,13 @@ type UserRepository interface {
 	Create(user *domain.User) error
 	Update(user *domain.User) error
 	SaveDeviceToken(device *domain.UserDevice) error
+	DeleteDeviceToken(userID string, deviceID string) error
+	FindDeviceTokensByUserID(userID string) ([]domain.UserDevice, error)
 }
 
 type TenantMemberRepository interface {
 	Create(member *domain.TenantMember) error
+	Update(member *domain.TenantMember) error
 	FindByUserAndTenant(userID string, tenantID string) (*domain.TenantMember, error)
 	FindRolesByUser(userID string) ([]domain.TenantMember, error)
 	FindStaffByTenant(tenantID string) ([]domain.TenantMember, error)

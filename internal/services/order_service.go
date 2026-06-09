@@ -134,6 +134,8 @@ func (s *OrderService) AddItems(tenantID string, orderID string, sessionID strin
 		return nil, errors.NewBadRequest(errors.ErrCodeValidationFailed, "Hoá đơn không hợp lệ", err)
 	}
 
+	isNewOrder := len(order.Items) == 0
+
 	if order.Status == "Paid" {
 		return nil, errors.NewBadRequest(errors.ErrCodeValidationFailed, "Hoá đơn đã thanh toán, không thể thêm món", nil)
 	}
@@ -200,13 +202,30 @@ func (s *OrderService) AddItems(tenantID string, orderID string, sessionID strin
 			}
 		}
 		
+		tableIDStr := ""
+		if order.TableID != nil {
+			tableIDStr = order.TableID.String()
+		}
+
+		title := "Có khách gọi thêm món"
+		body := fmt.Sprintf("Bàn %s vừa đặt thêm %d món.", tableName, itemCount)
+		if isNewOrder {
+			title = "Đơn hàng mới"
+			body = fmt.Sprintf("Bàn %s vừa tạo đơn hàng mới (%d món).", tableName, itemCount)
+		}
+
 		s.system.CreateNotification(
 			tenantID,
 			"", // Broadcast
-			"Có khách gọi món mới",
-			fmt.Sprintf("Bàn %s vừa đặt thêm %d món.", tableName, itemCount),
+			title,
+			body,
 			domain.NotiTypeNewOrder,
-			map[string]interface{}{"order_id": order.ID.String(), "table_id": tableName},
+			map[string]interface{}{
+				"order_id":   order.ID.String(),
+				"table_id":   tableIDStr,
+				"table_name": tableName,
+				"action":     "NEW_ORDER",
+			},
 		)
 	}
 
@@ -261,6 +280,114 @@ func (s *OrderService) Checkout(tenantID string, orderID string) (*domain.Order,
 	}
 
 	return order, nil
+}
+
+func (s *OrderService) RecalculateOrderTotal(tenantID string, orderID string) error {
+	order, err := s.orderRepo.FindByID(orderID, tenantID)
+	if err != nil {
+		return err
+	}
+	var total float64 = 0
+	for _, item := range order.Items {
+		total += item.SubTotal
+	}
+	order.TotalPrice = total
+	return s.orderRepo.Update(order)
+}
+
+func (s *OrderService) CancelOrder(tenantID string, orderID string) *errors.AppError {
+	order, err := s.orderRepo.FindByID(orderID, tenantID)
+	if err != nil {
+		return errors.NewBadRequest(errors.ErrCodeValidationFailed, "Hoá đơn không hợp lệ", err)
+	}
+
+	if order.Status == "Paid" {
+		return errors.NewBadRequest(errors.ErrCodeValidationFailed, "Hoá đơn đã thanh toán, không thể huỷ", nil)
+	}
+
+	order.Status = "Cancelled"
+	if err := s.orderRepo.UpdateStatus(order.ID.String(), "Cancelled"); err != nil {
+		return errors.NewInternalServer(err)
+	}
+
+	if order.TableID != nil {
+		table, err := s.tableRepo.FindByID(order.TableID.String(), tenantID)
+		if err == nil {
+			table.Status = "Available"
+			_ = s.tableRepo.Update(table)
+		}
+	}
+
+	return nil
+}
+
+func (s *OrderService) RemoveOrderItem(tenantID string, orderID string, itemID string) *errors.AppError {
+	order, err := s.orderRepo.FindByID(orderID, tenantID)
+	if err != nil {
+		return errors.NewBadRequest(errors.ErrCodeValidationFailed, "Hoá đơn không hợp lệ", err)
+	}
+	
+	if order.Status == "Paid" {
+		return errors.NewBadRequest(errors.ErrCodeValidationFailed, "Hoá đơn đã thanh toán, không thể thay đổi", nil)
+	}
+
+	if err := s.orderRepo.DeleteItem(itemID, tenantID); err != nil {
+		return errors.NewInternalServer(err)
+	}
+	
+	_ = s.RecalculateOrderTotal(tenantID, order.ID.String())
+
+	if s.pubSub != nil {
+		_ = s.pubSub.PublishEvent("KDS_EVENTS", EventPayload{
+			TenantID: tenantID,
+			Type:     domain.EventOrderCreated, // simple reload trigger
+			Data:     map[string]string{"order_id": orderID},
+		})
+	}
+	return nil
+}
+
+func (s *OrderService) UpdateOrderItemQuantity(tenantID string, orderID string, itemID string, quantity int) *errors.AppError {
+	order, err := s.orderRepo.FindByID(orderID, tenantID)
+	if err != nil {
+		return errors.NewBadRequest(errors.ErrCodeValidationFailed, "Hoá đơn không hợp lệ", err)
+	}
+	
+	if order.Status == "Paid" {
+		return errors.NewBadRequest(errors.ErrCodeValidationFailed, "Hoá đơn đã thanh toán", nil)
+	}
+
+	var targetItem *domain.OrderItem
+	for i := range order.Items {
+		if order.Items[i].ID.String() == itemID {
+			targetItem = &order.Items[i]
+			break
+		}
+	}
+
+	if targetItem == nil {
+		return errors.NewBadRequest(errors.ErrCodeValidationFailed, "Không tìm thấy món trong hoá đơn", nil)
+	}
+
+	if quantity <= 0 {
+		return s.RemoveOrderItem(tenantID, orderID, itemID)
+	}
+
+	newSubTotal := targetItem.Price * float64(quantity)
+	if err := s.orderRepo.UpdateItemQuantity(itemID, tenantID, quantity, newSubTotal); err != nil {
+		return errors.NewInternalServer(err)
+	}
+	
+	_ = s.RecalculateOrderTotal(tenantID, order.ID.String())
+
+	if s.pubSub != nil {
+		_ = s.pubSub.PublishEvent("KDS_EVENTS", EventPayload{
+			TenantID: tenantID,
+			Type:     domain.EventOrderCreated, // simple reload trigger
+			Data:     map[string]string{"order_id": orderID}, 
+		})
+	}
+	return nil
 }
 
 func (s *OrderService) UpdateItemStatus(tenantID string, itemID string, status string) *errors.AppError {

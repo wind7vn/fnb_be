@@ -6,10 +6,12 @@ import (
 	"os"
 	"sort"
 
+	"firebase.google.com/go/v4/messaging"
 	"github.com/google/uuid"
 	"github.com/wind7vn/fnb_be/internal/core/domain"
 	"github.com/wind7vn/fnb_be/internal/core/ports"
 	"github.com/wind7vn/fnb_be/pkg/common/errors"
+	"github.com/wind7vn/fnb_be/pkg/common/logger"
 	"github.com/wind7vn/fnb_be/pkg/config"
 	"gorm.io/datatypes"
 )
@@ -17,11 +19,12 @@ import (
 type SystemService struct {
 	actionLogRepo ports.ActionLogRepository
 	notiRepo      ports.NotificationRepository
+	userRepo      ports.UserRepository
 	pushNoti      *NotificationService // injected Firebase FCM service
 }
 
-func NewSystemService(al ports.ActionLogRepository, no ports.NotificationRepository, push *NotificationService) *SystemService {
-	return &SystemService{actionLogRepo: al, notiRepo: no, pushNoti: push}
+func NewSystemService(al ports.ActionLogRepository, no ports.NotificationRepository, ur ports.UserRepository, push *NotificationService) *SystemService {
+	return &SystemService{actionLogRepo: al, notiRepo: no, userRepo: ur, pushNoti: push}
 }
 
 // LogAction is meant to be called in a goroutine from other handlers or services.
@@ -61,8 +64,8 @@ func (s *SystemService) GetLogs(tenantID string, limit, offset int) ([]domain.Ac
 	return logs, nil
 }
 
-func (s *SystemService) GetUnreadNotifications(tenantID string, limit int) ([]domain.Notification, *errors.AppError) {
-	notis, err := s.notiRepo.GetUnreadByTenant(tenantID, limit)
+func (s *SystemService) GetUnreadNotifications(tenantID string, userID string, limit int) ([]domain.Notification, *errors.AppError) {
+	notis, err := s.notiRepo.GetUnreadByUser(tenantID, userID, limit)
 	if err != nil {
 		return nil, errors.NewInternalServer(err)
 	}
@@ -165,16 +168,52 @@ func (s *SystemService) CreateNotification(tenantID string, userID string, title
 
 	_ = s.notiRepo.Create(noti)
 
-	// Stub out actual FCM logic for now. 
-	// In production, fetch UserDevice tokens by UserID/TenantID, and use firebase.google.com/go/v4
+	// Direct token pushing & topic broadcasting
 	if s.pushNoti != nil {
-		topicStr := "tenant_" + tenantID + "_staff"
 		dataStr := make(map[string]string)
 		for k, v := range data {
 			if strVal, ok := v.(string); ok {
 				dataStr[k] = strVal
 			}
 		}
-		go s.pushNoti.SendTopicNotification(topicStr, title, message, dataStr)
+
+		// 1. Broadcast via Topic for general updates
+		topicStr := "tenant_" + tenantID + "_staff"
+		go func() {
+			err := s.pushNoti.SendTopicNotification(topicStr, title, message, dataStr)
+			if err != nil {
+				logger.Log.Error(fmt.Sprintf("Failed to send topic notification to %s: %v", topicStr, err))
+			}
+		}()
+
+		// 2. Direct push to individual user device tokens to support direct messaging & invalid token pruning
+		if userID != "" && uid != uuid.Nil {
+			go func() {
+				devices, err := s.userRepo.FindDeviceTokensByUserID(userID)
+				if err != nil {
+					return
+				}
+				payload := domain.PushNotificationPayload{
+					Type:     notiType,
+					Title:    title,
+					Body:     message,
+					TargetID: tenantID,
+					Data:     dataStr,
+				}
+				for _, dev := range devices {
+					if dev.FCMToken != "" {
+						sendErr := s.pushNoti.SendToToken(dev.FCMToken, payload)
+						if sendErr != nil {
+							if messaging.IsUnregistered(sendErr) {
+								logger.Log.Warn(fmt.Sprintf("FCM token for user %s, device %s is unregistered. Marking as deleted.", userID, dev.DeviceID))
+								_ = s.userRepo.DeleteDeviceToken(userID, dev.DeviceID)
+							} else {
+								logger.Log.Error(fmt.Sprintf("Failed to send push notification to device %s: %v", dev.DeviceID, sendErr))
+							}
+						}
+					}
+				}
+			}()
+		}
 	}
 }

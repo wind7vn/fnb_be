@@ -23,25 +23,27 @@ func NewSystemHandler(svc *services.SystemService) *SystemHandler {
 }
 
 func (h *SystemHandler) SetupRoutes(router fiber.Router) {
+	// Public Config Route (Bypasses /system group middlewares)
+	router.Get("/configs", h.GetClientConfigs)
+
 	group := router.Group("/system")
 
-	// Public Config Route
-	group.Get("/configs", h.GetClientConfigs)
-
-	group.Use(middlewares.JWTMiddleware())
-	group.Use(middlewares.TenantMiddleware())
+	systemMiddlewares := []fiber.Handler{
+		middlewares.JWTMiddleware(),
+		middlewares.TenantMiddleware(),
+	}
 
 	// Notifications
-	group.Get("/notifications", middlewares.RolesAllowed(domain.RoleOwner, domain.RoleManager, domain.RoleStaff), h.GetNotifications)
-	group.Put("/notifications/:id/read", middlewares.RolesAllowed(domain.RoleOwner, domain.RoleManager, domain.RoleStaff), h.MarkRead)
-	group.Put("/notifications/read-all", middlewares.RolesAllowed(domain.RoleOwner, domain.RoleManager, domain.RoleStaff), h.MarkAllRead)
-	group.Post("/notifications/call-staff", h.CallStaff)
+	group.Get("/notifications", append(systemMiddlewares, middlewares.RolesAllowed(domain.RoleOwner, domain.RoleManager, domain.RoleStaff), h.GetNotifications)...)
+	group.Put("/notifications/:id/read", append(systemMiddlewares, middlewares.RolesAllowed(domain.RoleOwner, domain.RoleManager, domain.RoleStaff), h.MarkRead)...)
+	group.Put("/notifications/read-all", append(systemMiddlewares, middlewares.RolesAllowed(domain.RoleOwner, domain.RoleManager, domain.RoleStaff), h.MarkAllRead)...)
+	group.Post("/notifications/call-staff", append(systemMiddlewares, h.CallStaff)...)
 
 	// Action Logs
-	group.Get("/action-logs", middlewares.RolesAllowed(domain.RoleOwner, domain.RoleManager), h.GetActionLogs)
+	group.Get("/action-logs", append(systemMiddlewares, middlewares.RolesAllowed(domain.RoleOwner, domain.RoleManager), h.GetActionLogs)...)
 
 	// Banks Configuration
-	group.Get("/banks", middlewares.RolesAllowed(domain.RoleOwner, domain.RoleManager, domain.RoleStaff), h.GetBanks)
+	group.Get("/banks", append(systemMiddlewares, middlewares.RolesAllowed(domain.RoleOwner, domain.RoleManager, domain.RoleStaff), h.GetBanks)...)
 }
 
 func (h *SystemHandler) CallStaff(c *fiber.Ctx) error {
@@ -71,9 +73,10 @@ func (h *SystemHandler) CallStaff(c *fiber.Ctx) error {
 
 func (h *SystemHandler) GetNotifications(c *fiber.Ctx) error {
 	tenantID := c.Locals("tenant_id").(string)
+	userID := c.Locals("user_id").(string)
 	limit, _ := strconv.Atoi(c.Query("limit", "20"))
 
-	notis, appErr := h.svc.GetUnreadNotifications(tenantID, limit)
+	notis, appErr := h.svc.GetUnreadNotifications(tenantID, userID, limit)
 	if appErr != nil {
 		return response.Error(c, appErr)
 	}

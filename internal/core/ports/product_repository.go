@@ -7,5 +7,6 @@ type ProductRepository interface {
 	FindAllByTenant(tenantID string, category *string) ([]domain.Product, error)
 	FindByID(id string, tenantID string) (*domain.Product, error)
 	Update(product *domain.Product) error
+	BatchUpdateStatus(tenantID string, updates map[string]bool) error
 	Delete(id string, tenantID string) error
 }

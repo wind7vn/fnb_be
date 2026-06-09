@@ -10,7 +10,7 @@ type ActionLogRepository interface {
 
 type NotificationRepository interface {
 	Create(notification *domain.Notification) error
-	GetUnreadByTenant(tenantID string, limit int) ([]domain.Notification, error)
+	GetUnreadByUser(tenantID string, userID string, limit int) ([]domain.Notification, error)
 	MarkAsRead(tenantID string, notificationID string) error
 	MarkAllAsRead(tenantID string) error
 }

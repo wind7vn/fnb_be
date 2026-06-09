@@ -29,6 +29,7 @@ func (h *ProductHandler) SetupRoutes(router fiber.Router) {
 	// Write is restricted to Managers and Owners
 	writeGroup := prodGroup.Group("/", middlewares.RolesAllowed(domain.RoleOwner, domain.RoleManager))
 	writeGroup.Post("/", h.Create)
+	writeGroup.Put("/batch/status", h.BatchUpdateStatus)
 	writeGroup.Put("/:id", h.Update)
 	writeGroup.Delete("/:id", h.Delete)
 }
@@ -88,4 +89,18 @@ func (h *ProductHandler) Delete(c *fiber.Ctx) error {
 		return response.Error(c, appErr)
 	}
 	return response.SuccessWithMessage(c, "Deleted successfully", nil)
+}
+
+func (h *ProductHandler) BatchUpdateStatus(c *fiber.Ctx) error {
+	tenantID := c.Locals("tenant_id").(string)
+
+	var req services.BatchUpdateStatusRequest
+	if err := c.BodyParser(&req); err != nil {
+		return response.Error(c, errors.NewBadRequest(errors.ErrCodeValidationFailed, "Invalid format", err))
+	}
+
+	if appErr := h.svc.BatchUpdateStatus(tenantID, req); appErr != nil {
+		return response.Error(c, appErr)
+	}
+	return response.SuccessWithMessage(c, "Batch updated successfully", nil)
 }

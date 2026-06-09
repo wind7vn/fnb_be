@@ -37,3 +37,7 @@ func (r *tenantMemberRepository) FindStaffByTenant(tenantID string) ([]domain.Te
 	err := r.db.Where("tenant_id = ?", tenantID).Find(&members).Error
 	return members, err
 }
+
+func (r *tenantMemberRepository) Update(member *domain.TenantMember) error {
+	return r.db.Save(member).Error
+}

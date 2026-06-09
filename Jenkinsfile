@@ -30,12 +30,15 @@ pipeline {
                     steps {
                         withCredentials([
                             file(credentialsId: 'dev-env-file', variable: 'ENV_FILE'),
-                            file(credentialsId: 'dev-firebase-service-account', variable: 'FIREBASE_FILE')
+                            file(credentialsId: 'dev-firebase-service-account', variable: 'FIREBASE_FILE'),
+                            file(credentialsId: 'apn_apple_p8', variable: 'APNS_FILE')
                         ]) {
                             script {
                                 sh '''
+                                    mkdir -p configs
                                     cp $ENV_FILE .env
-                                    cp $FIREBASE_FILE firebase-service-account.json
+                                    cp $FIREBASE_FILE configs/firebase-service-account.json
+                                    cp $APNS_FILE configs/AuthKey_S77A4NC4RH.p8
                                 '''
                             }
                         }
@@ -61,8 +64,10 @@ pipeline {
                                 sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} 'cd ${DEPLOY_PATH}/src && export PATH=\\$PATH:/usr/local/go/bin:/usr/bin && CGO_ENABLED=0 GOOS=linux go build -a -o ../fnb_be ./cmd/server && CGO_ENABLED=0 GOOS=linux go build -a -o ../fnb_migrator ./cmd/migrator'"
                                 
                                 echo "--- Moving secrets to target ---"
+                                sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} 'mkdir -p ${DEPLOY_PATH}/configs'"
                                 sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} 'mv -f ${DEPLOY_PATH}/src/.env ${DEPLOY_PATH}/.env'"
-                                sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} 'mv -f ${DEPLOY_PATH}/src/firebase-service-account.json ${DEPLOY_PATH}/firebase-service-account.json'"
+                                sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} 'mv -f ${DEPLOY_PATH}/src/configs/firebase-service-account.json ${DEPLOY_PATH}/configs/firebase-service-account.json || mv -f ${DEPLOY_PATH}/src/firebase-service-account.json ${DEPLOY_PATH}/configs/firebase-service-account.json'"
+                                sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} 'mv -f ${DEPLOY_PATH}/src/configs/AuthKey_S77A4NC4RH.p8 ${DEPLOY_PATH}/configs/AuthKey_S77A4NC4RH.p8'"
                                 
                                 echo "--- Running Database Migrations ---"
                                 sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_IP} 'cd ${DEPLOY_PATH} && ./fnb_migrator'"

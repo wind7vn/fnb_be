@@ -1,6 +1,7 @@
 package repositories
 
 import (
+	"github.com/google/uuid"
 	"github.com/wind7vn/fnb_be/internal/core/domain"
 	"gorm.io/gorm"
 )
@@ -41,4 +42,24 @@ func (r *userRepository) SaveDeviceToken(device *domain.UserDevice) error {
 	return r.db.Where(domain.UserDevice{UserID: device.UserID, DeviceID: device.DeviceID}).
 		Assign(domain.UserDevice{FCMToken: device.FCMToken, Platform: device.Platform, LastActive: device.LastActive}).
 		FirstOrCreate(device).Error
+}
+
+func (r *userRepository) DeleteDeviceToken(userID string, deviceID string) error {
+	uid, err := uuid.Parse(userID)
+	if err != nil {
+		return err
+	}
+	return r.db.Where("user_id = ? AND device_id = ?", uid, deviceID).
+		Updates(map[string]interface{}{"is_deleted": true}).
+		Delete(&domain.UserDevice{}).Error
+}
+
+func (r *userRepository) FindDeviceTokensByUserID(userID string) ([]domain.UserDevice, error) {
+	uid, err := uuid.Parse(userID)
+	if err != nil {
+		return nil, err
+	}
+	var devices []domain.UserDevice
+	err = r.db.Where("user_id = ? AND is_deleted = false", uid).Find(&devices).Error
+	return devices, err
 }

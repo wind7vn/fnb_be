@@ -33,14 +33,22 @@ func main() {
 	// 2. Create the Owner User
 	hashPW, _ := bcrypt.GenerateFromPassword([]byte("123456"), bcrypt.DefaultCost)
 	owner := domain.User{
-		TenantID:     &tenant.ID,
 		PhoneNumber:  "0982651922",
 		PasswordHash: string(hashPW),
-		Role:         domain.RoleOwner,
 		FullName:     "Phong Nguyen",
 	}
 	if err := db.Create(&owner).Error; err != nil {
 		log.Fatalf("Failed to create owner user: %v", err)
+	}
+
+	// 2.5. Create TenantMember mapping User to Tenant
+	member := domain.TenantMember{
+		UserID:   owner.ID,
+		TenantID: tenant.ID,
+		Role:     domain.RoleOwner,
+	}
+	if err := db.Create(&member).Error; err != nil {
+		log.Fatalf("Failed to create tenant member mapping: %v", err)
 	}
 
 	// 3. Create some Tables

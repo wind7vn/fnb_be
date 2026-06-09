@@ -13,25 +13,27 @@ import (
 type TenantHandler struct {
 	tenantService *services.TenantService
 	aiService     *services.AIService
+	reportService *services.ReportService
 }
 
-func NewTenantHandler(tenantService *services.TenantService, aiService *services.AIService) *TenantHandler {
-	return &TenantHandler{tenantService: tenantService, aiService: aiService}
+func NewTenantHandler(tenantService *services.TenantService, aiService *services.AIService, reportService *services.ReportService) *TenantHandler {
+	return &TenantHandler{tenantService: tenantService, aiService: aiService, reportService: reportService}
 }
 
 func (h *TenantHandler) SetupRoutes(router fiber.Router) {
 	sysGroup := router.Group("/system")
 	
-	sysGroup.Use(middlewares.JWTMiddleware())
-	// Only Superadmin or Admin can manage system-wide tenants
-	sysGroup.Use(middlewares.RolesAllowed(
-		domain.RoleSuperadmin, string(domain.SystemRoleSuperuser),
-		domain.RoleAdmin, string(domain.SystemRoleAdmin),
-	))
+	adminMiddlewares := []fiber.Handler{
+		middlewares.JWTMiddleware(),
+		middlewares.RolesAllowed(
+			domain.RoleSuperadmin, string(domain.SystemRoleSuperuser),
+			domain.RoleAdmin, string(domain.SystemRoleAdmin),
+		),
+	}
 
-	sysGroup.Post("/tenants", h.CreateTenant)
-	sysGroup.Post("/admins", h.CreateAdmin)
-	sysGroup.Get("/tenants", h.GetTenants)
+	sysGroup.Post("/tenants", append(adminMiddlewares, h.CreateTenant)...)
+	sysGroup.Post("/admins", append(adminMiddlewares, h.CreateAdmin)...)
+	sysGroup.Get("/tenants", append(adminMiddlewares, h.GetTenants)...)
 
 	// Owner/Manager APIs scoped by Tenant sandbox
 	tenantGroup := router.Group("/tenant")
@@ -40,8 +42,16 @@ func (h *TenantHandler) SetupRoutes(router fiber.Router) {
 
 	tenantGroup.Get("/staff", middlewares.RolesAllowed(domain.RoleOwner, domain.RoleManager), h.GetStaff)
 	tenantGroup.Post("/staff", middlewares.RolesAllowed(domain.RoleOwner, domain.RoleManager), h.CreateStaff)
+	tenantGroup.Put("/staff/:id", middlewares.RolesAllowed(
+		domain.RoleOwner, domain.RoleAdmin, domain.RoleSuperadmin,
+		string(domain.SystemRoleAdmin), string(domain.SystemRoleSuperuser),
+	), h.UpdateStaff)
 	tenantGroup.Put("/settings", middlewares.RolesAllowed(domain.RoleOwner), h.UpdateSettings)
 	tenantGroup.Post("/ai/scan-menu", middlewares.RolesAllowed(domain.RoleOwner, domain.RoleManager), h.ScanMenuByAI)
+	tenantGroup.Get("/reports/dashboard", middlewares.RolesAllowed(
+		domain.RoleOwner, domain.RoleAdmin, domain.RoleSuperadmin,
+		string(domain.SystemRoleAdmin), string(domain.SystemRoleSuperuser),
+	), h.GetDashboardReport)
 }
 
 func (h *TenantHandler) CreateTenant(c *fiber.Ctx) error {
@@ -176,4 +186,33 @@ func (h *TenantHandler) ScanMenuByAI(c *fiber.Ctx) error {
 
 	fmt.Println("----> DEBUG: Success!")
 	return response.Success(c, items)
+}
+
+func (h *TenantHandler) UpdateStaff(c *fiber.Ctx) error {
+	tenantID := c.Locals("tenant_id").(string)
+	staffUserID := c.Params("id")
+
+	var req services.UpdateStaffRequest
+	if err := c.BodyParser(&req); err != nil {
+		return response.Error(c, errors.NewBadRequest(errors.ErrCodeValidationFailed, "Dữ liệu không hợp lệ", err))
+	}
+
+	appErr := h.tenantService.UpdateStaff(tenantID, staffUserID, req)
+	if appErr != nil {
+		return response.Error(c, appErr)
+	}
+
+	return response.SuccessWithMessage(c, "Cập nhật thông tin nhân viên thành công", nil)
+}
+
+func (h *TenantHandler) GetDashboardReport(c *fiber.Ctx) error {
+	tenantID := c.Locals("tenant_id").(string)
+	dateRange := c.Query("range", "today")
+
+	report, appErr := h.reportService.GetDashboardReport(tenantID, dateRange)
+	if appErr != nil {
+		return response.Error(c, appErr)
+	}
+
+	return response.Success(c, report)
 }

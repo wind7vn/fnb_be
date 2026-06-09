@@ -131,6 +131,13 @@ func (s *AuthService) RegisterDevice(userID string, deviceID string, fcmToken st
 	return nil
 }
 
+func (s *AuthService) UnregisterDevice(userID string, deviceID string) *errors.AppError {
+	if err := s.userRepo.DeleteDeviceToken(userID, deviceID); err != nil {
+		return errors.NewInternalServer(err)
+	}
+	return nil
+}
+
 func (s *AuthService) GetMe(userID string) (*domain.User, *errors.AppError) {
 	user, err := s.userRepo.FindByID(userID)
 	if err != nil {

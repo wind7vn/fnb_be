@@ -63,7 +63,8 @@ func main() {
 
 	aiService := services.NewAIService(config.AppConfig.GeminiApiKey)
 	tenantService := services.NewTenantService(tenantRepo, userRepo, memberRepo)
-	tenantHandler := handlers.NewTenantHandler(tenantService, aiService)
+	reportService := services.NewReportService(db.DB)
+	tenantHandler := handlers.NewTenantHandler(tenantService, aiService, reportService)
 
 	productRepo := repositories.NewProductRepository(db.DB)
 	productService := services.NewProductService(productRepo)
@@ -79,7 +80,7 @@ func main() {
 
 	pubSubService := services.NewPubSubService()
 	pushNotiService := services.NewNotificationService()
-	systemService := services.NewSystemService(actionLogRepo, notiRepo, pushNotiService)
+	systemService := services.NewSystemService(actionLogRepo, notiRepo, userRepo, pushNotiService)
 	orderService := services.NewOrderService(orderRepo, productRepo, tableRepo, tenantRepo, pubSubService, systemService)
 	orderHandler := handlers.NewOrderHandler(orderService)
 	systemHandler := handlers.NewSystemHandler(systemService)

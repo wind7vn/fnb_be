@@ -27,6 +27,7 @@ func (h *AuthHandler) SetupRoutes(router fiber.Router) {
 	authGroup.Use(middlewares.JWTMiddleware())
 	authGroup.Get("/me", h.GetMe)
 	authGroup.Post("/devices", h.RegisterDevice)
+	authGroup.Delete("/devices/:device_id", h.UnregisterDevice)
 	authGroup.Get("/my-tenants", h.GetMyTenants)
 	authGroup.Post("/switch-tenant", h.SwitchTenant)
 }
@@ -65,6 +66,22 @@ func (h *AuthHandler) RegisterDevice(c *fiber.Ctx) error {
 	}
 
 	return response.SuccessWithMessage(c, "Device registered successfully", nil)
+}
+
+// DELETE /auth/devices/:device_id
+func (h *AuthHandler) UnregisterDevice(c *fiber.Ctx) error {
+	userID := c.Locals("user_id").(string)
+	deviceID := c.Params("device_id")
+
+	if deviceID == "" {
+		return response.Error(c, errors.NewBadRequest(errors.ErrCodeValidationFailed, "Device ID is required", nil))
+	}
+
+	if appErr := h.authService.UnregisterDevice(userID, deviceID); appErr != nil {
+		return response.Error(c, appErr)
+	}
+
+	return response.SuccessWithMessage(c, "Device unregistered successfully", nil)
 }
 
 func (h *AuthHandler) GetMe(c *fiber.Ctx) error {

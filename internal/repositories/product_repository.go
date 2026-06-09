@@ -41,3 +41,29 @@ func (r *productRepository) Update(product *domain.Product) error {
 func (r *productRepository) Delete(id string, tenantID string) error {
 	return r.dbConn.Scopes(db.TenantScope(tenantID)).Where("id = ?", id).Delete(&domain.Product{}).Error
 }
+
+func (r *productRepository) BatchUpdateStatus(tenantID string, updates map[string]bool) error {
+	var trueIDs []string
+	var falseIDs []string
+	for id, status := range updates {
+		if status {
+			trueIDs = append(trueIDs, id)
+		} else {
+			falseIDs = append(falseIDs, id)
+		}
+	}
+
+	return r.dbConn.Transaction(func(tx *gorm.DB) error {
+		if len(trueIDs) > 0 {
+			if e := tx.Scopes(db.TenantScope(tenantID)).Where("id IN ?", trueIDs).Model(&domain.Product{}).Update("is_available", true).Error; e != nil {
+				return e
+			}
+		}
+		if len(falseIDs) > 0 {
+			if e := tx.Scopes(db.TenantScope(tenantID)).Where("id IN ?", falseIDs).Model(&domain.Product{}).Update("is_available", false).Error; e != nil {
+				return e
+			}
+		}
+		return nil
+	})
+}

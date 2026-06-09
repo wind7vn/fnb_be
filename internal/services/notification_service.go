@@ -74,6 +74,58 @@ func (s *NotificationService) SendPush(topic string, payload domain.PushNotifica
 		},
 		Data:  payload.Data,
 		Topic: topic,
+		APNS: &messaging.APNSConfig{
+			Payload: &messaging.APNSPayload{
+				Aps: &messaging.Aps{
+					Sound:    "default",
+					ThreadID: "tenant_" + topic + "_" + payload.Type,
+				},
+			},
+		},
+		Android: &messaging.AndroidConfig{
+			Notification: &messaging.AndroidNotification{
+				Sound: "default",
+			},
+		},
+	}
+
+	_, err := s.client.Send(context.Background(), message)
+	return err
+}
+
+func (s *NotificationService) SendToToken(token string, payload domain.PushNotificationPayload) error {
+	if s.client == nil {
+		return nil
+	}
+
+	if payload.Data == nil {
+		payload.Data = make(map[string]string)
+	}
+	payload.Data["type"] = payload.Type
+	if payload.TargetID != "" {
+		payload.Data["target_id"] = payload.TargetID
+	}
+
+	message := &messaging.Message{
+		Notification: &messaging.Notification{
+			Title: payload.Title,
+			Body:  payload.Body,
+		},
+		Data:  payload.Data,
+		Token: token,
+		APNS: &messaging.APNSConfig{
+			Payload: &messaging.APNSPayload{
+				Aps: &messaging.Aps{
+					Sound:    "default",
+					ThreadID: "token_" + payload.Type,
+				},
+			},
+		},
+		Android: &messaging.AndroidConfig{
+			Notification: &messaging.AndroidNotification{
+				Sound: "default",
+			},
+		},
 	}
 
 	_, err := s.client.Send(context.Background(), message)

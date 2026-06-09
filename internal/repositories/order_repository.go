@@ -27,7 +27,7 @@ func (r *orderRepository) FindByID(id string, tenantID string) (*domain.Order, e
 func (r *orderRepository) FindActiveByTable(tableID string, tenantID string) (*domain.Order, error) {
 	var order domain.Order
 	err := r.dbConn.Scopes(db.TenantScope(tenantID)).
-		Where("table_id = ? AND status != 'Paid'", tableID).
+		Where("table_id = ? AND status NOT IN ('Paid', 'Cancelled')", tableID).
 		Preload("Items").
 		Preload("Items.Product").
 		First(&order).Error
@@ -37,7 +37,7 @@ func (r *orderRepository) FindActiveByTable(tableID string, tenantID string) (*d
 func (r *orderRepository) FindAllActive(tenantID string) ([]domain.Order, error) {
 	var orders []domain.Order
 	err := r.dbConn.Scopes(db.TenantScope(tenantID)).
-		Where("status != 'Paid'").
+		Where("status NOT IN ('Paid', 'Cancelled')").
 		Preload("Items").
 		Preload("Items.Product").
 		Find(&orders).Error
@@ -54,4 +54,15 @@ func (r *orderRepository) UpdateStatus(orderID string, status string) error {
 
 func (r *orderRepository) UpdateItemStatus(itemID string, status string) error {
 	return r.dbConn.Model(&domain.OrderItem{}).Where("id = ?", itemID).Update("status", status).Error
+}
+
+func (r *orderRepository) DeleteItem(itemID string, tenantID string) error {
+	return r.dbConn.Where("id = ? AND tenant_id = ?", itemID, tenantID).Delete(&domain.OrderItem{}).Error
+}
+
+func (r *orderRepository) UpdateItemQuantity(itemID string, tenantID string, quantity int, newSubTotal float64) error {
+	return r.dbConn.Model(&domain.OrderItem{}).Where("id = ? AND tenant_id = ?", itemID, tenantID).Updates(map[string]interface{}{
+		"quantity":  quantity,
+		"sub_total": newSubTotal,
+	}).Error
 }

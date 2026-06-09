@@ -25,6 +25,10 @@ type ProductRequest struct {
 	IsAvailable bool    `json:"is_available"`
 }
 
+type BatchUpdateStatusRequest struct {
+	Updates map[string]bool `json:"updates"`
+}
+
 func (s *ProductService) Create(tenantID string, req ProductRequest) (*domain.Product, *errors.AppError) {
 	tid, err := uuid.Parse(tenantID)
 	if err != nil {
@@ -75,6 +79,16 @@ func (s *ProductService) Update(tenantID string, productID string, req ProductRe
 		return nil, errors.NewInternalServer(err)
 	}
 	return product, nil
+}
+
+func (s *ProductService) BatchUpdateStatus(tenantID string, req BatchUpdateStatusRequest) *errors.AppError {
+	if len(req.Updates) == 0 {
+		return nil
+	}
+	if err := s.repo.BatchUpdateStatus(tenantID, req.Updates); err != nil {
+		return errors.NewInternalServer(err)
+	}
+	return nil
 }
 
 func (s *ProductService) Delete(tenantID string, productID string) *errors.AppError {

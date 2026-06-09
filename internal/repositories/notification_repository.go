@@ -19,10 +19,10 @@ func (r *notificationRepository) Create(notification *domain.Notification) error
 	return r.db.Create(notification).Error
 }
 
-func (r *notificationRepository) GetUnreadByTenant(tenantID string, limit int) ([]domain.Notification, error) {
+func (r *notificationRepository) GetUnreadByUser(tenantID string, userID string, limit int) ([]domain.Notification, error) {
 	var results []domain.Notification
 	err := db.TenantScope(tenantID)(r.db).
-		Where("is_read = ?", false).
+		Where("is_read = ? AND (user_id = ? OR user_id = '00000000-0000-0000-0000-000000000000')", false, userID).
 		Order("created_at desc").
 		Limit(limit).
 		Find(&results).Error

@@ -35,8 +35,12 @@ func (h *OrderHandler) SetupRoutes(router fiber.Router) {
 	// Checkout is Staff only
 	orderGroup.Put("/:id/checkout", middlewares.RolesAllowed(domain.RoleOwner, domain.RoleManager, domain.RoleStaff), h.Checkout)
 
-	// Generate QR token. Staff side mechanism
 	orderGroup.Post("/guest", middlewares.RolesAllowed(domain.RoleOwner, domain.RoleManager, domain.RoleStaff), h.GenerateGuestQR)
+
+	// Cancellation and item updates
+	orderGroup.Delete("/:id/cancel", middlewares.RolesAllowed(domain.RoleOwner, domain.RoleManager, domain.RoleStaff), h.CancelOrder)
+	orderGroup.Delete("/:id/items/:itemId", middlewares.RolesAllowed(domain.RoleOwner, domain.RoleManager, domain.RoleStaff), h.RemoveOrderItem)
+	orderGroup.Put("/:id/items/:itemId/quantity", middlewares.RolesAllowed(domain.RoleOwner, domain.RoleManager, domain.RoleStaff), h.UpdateOrderItemQuantity)
 
 	// KDS specific updating Endpoint
 	orderGroup.Put("/items/:itemId/status", middlewares.RolesAllowed(domain.RoleOwner, domain.RoleManager, domain.RoleStaff), h.UpdateItemStatus)
@@ -171,6 +175,48 @@ func (h *OrderHandler) Checkout(c *fiber.Ctx) error {
 	}
 
 	return response.Success(c, order)
+}
+
+func (h *OrderHandler) CancelOrder(c *fiber.Ctx) error {
+	tenantID := c.Locals("tenant_id").(string)
+	orderID := c.Params("id")
+
+	appErr := h.svc.CancelOrder(tenantID, orderID)
+	if appErr != nil {
+		return response.Error(c, appErr)
+	}
+	return response.Success(c, nil)
+}
+
+func (h *OrderHandler) RemoveOrderItem(c *fiber.Ctx) error {
+	tenantID := c.Locals("tenant_id").(string)
+	orderID := c.Params("id")
+	itemID := c.Params("itemId")
+
+	appErr := h.svc.RemoveOrderItem(tenantID, orderID, itemID)
+	if appErr != nil {
+		return response.Error(c, appErr)
+	}
+	return response.Success(c, nil)
+}
+
+func (h *OrderHandler) UpdateOrderItemQuantity(c *fiber.Ctx) error {
+	tenantID := c.Locals("tenant_id").(string)
+	orderID := c.Params("id")
+	itemID := c.Params("itemId")
+
+	var req struct {
+		Quantity int `json:"quantity"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return response.Error(c, errors.NewBadRequest(errors.ErrCodeValidationFailed, "Invalid body format", err))
+	}
+
+	appErr := h.svc.UpdateOrderItemQuantity(tenantID, orderID, itemID, req.Quantity)
+	if appErr != nil {
+		return response.Error(c, appErr)
+	}
+	return response.Success(c, nil)
 }
 
 func (h *OrderHandler) UpdateItemStatus(c *fiber.Ctx) error {
