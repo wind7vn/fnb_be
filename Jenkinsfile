@@ -37,6 +37,7 @@ pipeline {
                                 sh '''
                                     mkdir -p configs
                                     cp $ENV_FILE .env
+                                    sed -i 's/^PORT=.*/PORT=4000/' .env || sed -i '' 's/^PORT=.*/PORT=4000/' .env
                                     cp $FIREBASE_FILE configs/firebase-service-account.json
                                     cp $APNS_FILE configs/AuthKey_S77A4NC4RH.p8
                                 '''
