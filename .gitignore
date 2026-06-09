@@ -42,3 +42,9 @@ ehthumbs.db
 Thumbs.db
 configs/*
 uploads/*
+
+# Built Binaries
+main
+main.exe
+fnb_be
+fnb_migrator
