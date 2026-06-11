@@ -12,4 +12,5 @@ type OrderRepository interface {
 	UpdateItemStatus(itemID string, status string) error
 	DeleteItem(itemID string, tenantID string) error
 	UpdateItemQuantity(itemID string, tenantID string, quantity int, newSubTotal float64) error
+	FindItemByID(itemID string) (*domain.OrderItem, error)
 }

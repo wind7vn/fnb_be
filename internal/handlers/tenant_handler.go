@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/gofiber/fiber/v2"
 	"github.com/wind7vn/fnb_be/internal/core/domain"
@@ -47,6 +48,10 @@ func (h *TenantHandler) SetupRoutes(router fiber.Router) {
 		string(domain.SystemRoleAdmin), string(domain.SystemRoleSuperuser),
 	), h.UpdateStaff)
 	tenantGroup.Put("/settings", middlewares.RolesAllowed(domain.RoleOwner), h.UpdateSettings)
+	tenantGroup.Get("/settings", middlewares.RolesAllowed(
+		domain.RoleOwner, domain.RoleManager, domain.RoleStaff, domain.RoleSuperadmin, domain.RoleAdmin,
+		string(domain.SystemRoleSuperuser), string(domain.SystemRoleAdmin),
+	), h.GetSettings)
 	tenantGroup.Post("/ai/scan-menu", middlewares.RolesAllowed(domain.RoleOwner, domain.RoleManager), h.ScanMenuByAI)
 	tenantGroup.Get("/reports/dashboard", middlewares.RolesAllowed(
 		domain.RoleOwner, domain.RoleAdmin, domain.RoleSuperadmin,
@@ -141,13 +146,19 @@ func (h *TenantHandler) UpdateSettings(c *fiber.Ctx) error {
 func (h *TenantHandler) GetSettings(c *fiber.Ctx) error {
 	tenantID := c.Locals("tenant_id").(string)
 
-	metadata, appErr := h.tenantService.GetSettings(tenantID)
+	tenant, appErr := h.tenantService.GetTenantByID(tenantID)
 	if appErr != nil {
 		return response.Error(c, appErr)
 	}
 
-	// Just return as metadata JSON object
-	return response.Success(c, fiber.Map{"metadata": metadata})
+	var meta map[string]interface{}
+	if err := json.Unmarshal([]byte(tenant.Metadata), &meta); err != nil {
+		meta = make(map[string]interface{})
+	}
+	meta["store_name"] = tenant.Name
+
+	metaBytes, _ := json.Marshal(meta)
+	return response.Success(c, fiber.Map{"metadata": string(metaBytes)})
 }
 
 func (h *TenantHandler) ScanMenuByAI(c *fiber.Ctx) error {

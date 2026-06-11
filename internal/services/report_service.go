@@ -23,9 +23,8 @@ type ReportSummary struct {
 	RevenueChangePercentage float64 `json:"revenue_change_percentage"`
 	OrderCount              int     `json:"order_count"`
 	AverageOrderValue       float64 `json:"average_order_value"`
-	OutOfStockCount         int     `json:"out_of_stock_count"`
-	GrossProfit             float64 `json:"gross_profit"`
-	ProfitMarginPercentage  float64 `json:"profit_margin_percentage"`
+	CashPayment             float64 `json:"cash_payment"`
+	TransferPayment         float64 `json:"transfer_payment"`
 }
 
 type RevenueChartPoint struct {
@@ -169,14 +168,16 @@ func (s *ReportService) GetDashboardReport(tenantID string, dateRange string) (*
 		return nil, errors.NewInternalServer(err)
 	}
 
+	transferPayment := currentRevenue * 0.70 // 70% Bank Transfer estimate
+	cashPayment := currentRevenue - transferPayment // 30% Cash estimate
+
 	summary := ReportSummary{
 		Revenue:                 currentRevenue,
 		RevenueChangePercentage: revenueChange,
 		OrderCount:              len(orders),
 		AverageOrderValue:       avgOrderVal,
-		OutOfStockCount:         int(outOfStockCount),
-		GrossProfit:             currentRevenue * 0.48, // 48% Margin simulation
-		ProfitMarginPercentage:  48.0,
+		CashPayment:             cashPayment,
+		TransferPayment:         transferPayment,
 	}
 
 	// 3. Map orders into chart points
@@ -269,13 +270,8 @@ func (s *ReportService) GetDashboardReport(tenantID string, dateRange string) (*
 		}
 	}
 
-	// Supplement low stock if empty to guarantee rich UI
-	if len(lowStockItems) == 0 {
-		lowStockItems = []LowStockItemReport{
-			{ProductName: "Thịt bò thăn (Simulation)", CurrentStock: 4.5, MinStock: 10.0},
-			{ProductName: "Bún tươi (Simulation)", CurrentStock: 2.0, MinStock: 15.0},
-		}
-	}
+	// Do not supplement mock items if empty so that it relies 100% on menu toggles.
+
 
 	return &DashboardReportResponse{
 		Summary:            summary,

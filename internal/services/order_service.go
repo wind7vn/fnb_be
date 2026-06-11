@@ -128,7 +128,7 @@ func (s *OrderService) OpenSession(tenantID string, req OpenSessionRequest) (*do
 func (s *OrderService) AddItems(tenantID string, orderID string, sessionID string, items []struct {
 	ProductID string `json:"product_id"`
 	Quantity  int    `json:"quantity"`
-}) (*domain.Order, *errors.AppError) {
+}, isStaff bool) (*domain.Order, *errors.AppError) {
 	order, err := s.orderRepo.FindByID(orderID, tenantID)
 	if err != nil {
 		return nil, errors.NewBadRequest(errors.ErrCodeValidationFailed, "Hoá đơn không hợp lệ", err)
@@ -158,6 +158,11 @@ func (s *OrderService) AddItems(tenantID string, orderID string, sessionID strin
 
 		pid := product.ID
 
+		initialStatus := domain.OrderStatusPending
+		if isStaff {
+			initialStatus = domain.OrderStatusCooking
+		}
+
 		orderItem := domain.OrderItem{
 			TenantID:  order.TenantID,
 			OrderID:   order.ID,
@@ -165,7 +170,7 @@ func (s *OrderService) AddItems(tenantID string, orderID string, sessionID strin
 			Quantity:  itemReq.Quantity,
 			Price:     product.Price,
 			SubTotal:  product.Price * float64(itemReq.Quantity),
-			Status:    "Pending",
+			Status:    initialStatus,
 		}
 		
 		order.Items = append(order.Items, orderItem)
@@ -227,6 +232,11 @@ func (s *OrderService) AddItems(tenantID string, orderID string, sessionID strin
 				"action":     "NEW_ORDER",
 			},
 		)
+	}
+
+	// Reload order to populate Items.Product in response
+	if reloaded, errFind := s.orderRepo.FindByID(order.ID.String(), tenantID); errFind == nil {
+		order = reloaded
 	}
 
 	return order, nil
@@ -409,11 +419,32 @@ func (s *OrderService) UpdateItemStatus(tenantID string, itemID string, status s
 	}
 
 	if status == string(domain.OrderStatusReady) && s.system != nil {
+		title := "Món ăn đã xong"
+		body := "Một món ăn trong đơn hàng đã hoàn tất"
+
+		// Try to load item details to specify the table and dish name
+		item, errItem := s.orderRepo.FindItemByID(itemID)
+		if errItem == nil && item != nil {
+			productName := "Món ăn"
+			if item.Product != nil && item.Product.Name != "" {
+				productName = item.Product.Name
+			}
+
+			tableName := "Mang đi"
+			order, errOrder := s.orderRepo.FindByID(item.OrderID.String(), tenantID)
+			if errOrder == nil && order != nil && order.Table != nil && order.Table.Name != "" {
+				tableName = order.Table.Name
+			}
+
+			title = fmt.Sprintf("Món xong - %s", tableName)
+			body = fmt.Sprintf("%dx %s đã nấu xong!", item.Quantity, productName)
+		}
+
 		s.system.CreateNotification(
 			tenantID,
 			"", // Assuming broadcast to tenant initially
-			"Món ăn đã xong",
-			"Một món ăn trong đơn hàng đã hoàn tất",
+			title,
+			body,
 			"KDS_ITEM_READY",
 			map[string]interface{}{"item_id": itemID},
 		)

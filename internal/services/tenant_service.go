@@ -1,12 +1,15 @@
 package services
 
 import (
+	"encoding/json"
+
 	"github.com/google/uuid"
 	"github.com/wind7vn/fnb_be/internal/core/domain"
 	"github.com/wind7vn/fnb_be/internal/core/ports"
 	"github.com/wind7vn/fnb_be/pkg/common/errors"
 	"golang.org/x/crypto/bcrypt"
 )
+
 
 type TenantService struct {
 	tenantRepo ports.TenantRepository
@@ -179,6 +182,15 @@ func (s *TenantService) UpdateSettings(tenantID string, req UpdateSettingsReques
 	}
 
 	tenant.Metadata = req.Metadata
+
+	// Parse metadata to extract and sync store_name to tenant.Name
+	var meta map[string]interface{}
+	if err := json.Unmarshal([]byte(req.Metadata), &meta); err == nil {
+		if storeName, ok := meta["store_name"].(string); ok && storeName != "" {
+			tenant.Name = storeName
+		}
+	}
+
 	if err := s.tenantRepo.Update(tenant); err != nil {
 		return errors.NewInternalServer(err)
 	}
@@ -192,6 +204,15 @@ func (s *TenantService) GetSettings(tenantID string) (string, *errors.AppError) 
 	}
 	return tenant.Metadata, nil
 }
+
+func (s *TenantService) GetTenantByID(tenantID string) (*domain.Tenant, *errors.AppError) {
+	tenant, err := s.tenantRepo.FindByID(tenantID)
+	if err != nil {
+		return nil, errors.NewBadRequest(errors.ErrCodeValidationFailed, "Không tìm thấy dữ liệu cửa hàng", err)
+	}
+	return tenant, nil
+}
+
 
 type UpdateStaffRequest struct {
 	FullName    string  `json:"full_name"`

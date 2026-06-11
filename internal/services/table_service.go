@@ -28,11 +28,16 @@ func (s *TableService) Create(tenantID string, req TableRequest) (*domain.Table,
 		return nil, errors.NewBadRequest(errors.ErrCodeValidationFailed, "Tenant ID invalid", err)
 	}
 
+	status := req.Status
+	if status == "" {
+		status = "Available"
+	}
+
 	table := &domain.Table{
 		TenantID: tid,
 		Name:     req.Name,
 		Zone:     req.Zone,
-		Status:   req.Status,
+		Status:   status,
 	}
 
 	if err := s.repo.Create(table); err != nil {

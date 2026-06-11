@@ -26,6 +26,7 @@ func (h *OrderHandler) SetupRoutes(router fiber.Router) {
 	// Create/Open table session (generates Order)
 	// Open to Staff/Owner and Guests possessing exact Table QR token
 	orderGroup.Post("/", middlewares.RolesAllowed(domain.RoleOwner, domain.RoleManager, domain.RoleStaff, "Guest"), h.OpenSession)
+	orderGroup.Get("/", middlewares.RolesAllowed(domain.RoleOwner, domain.RoleManager, domain.RoleStaff), h.GetActiveOrders)
 	// Allow Guest as well to load active order (for their UI to work)
 	orderGroup.Get("/tables/:tableId/active", middlewares.RolesAllowed(domain.RoleOwner, domain.RoleManager, domain.RoleStaff, "Guest"), h.GetActiveOrderByTable)
 
@@ -137,7 +138,10 @@ func (h *OrderHandler) AddItems(c *fiber.Ctx) error {
 		}
 	}
 
-	order, appErr := h.svc.AddItems(tenantID, orderID, sessionID, req.Items)
+	role, _ := c.Locals("role").(string)
+	isStaff := role != "Guest"
+
+	order, appErr := h.svc.AddItems(tenantID, orderID, sessionID, req.Items, isStaff)
 	if appErr != nil {
 		return response.Error(c, appErr)
 	}
@@ -249,4 +253,13 @@ func (h *OrderHandler) GenerateBankQR(c *fiber.Ctx) error {
 	}
 
 	return response.Success(c, qrData)
+}
+
+func (h *OrderHandler) GetActiveOrders(c *fiber.Ctx) error {
+	tenantID := c.Locals("tenant_id").(string)
+	orders, appErr := h.svc.GetActiveOrders(tenantID)
+	if appErr != nil {
+		return response.Error(c, appErr)
+	}
+	return response.Success(c, orders)
 }

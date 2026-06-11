@@ -40,7 +40,7 @@ func TestOrderCartCalculations(t *testing.T) {
 		{ProductID: prod2ID.String(), Quantity: 3}, // 45,000
 	}
 
-	updatedOrder, err := svc.AddItems(tenantID.String(), order.ID.String(), "", items)
+	updatedOrder, err := svc.AddItems(tenantID.String(), order.ID.String(), "", items, false)
 
 	assert.Nil(t, err)
 	assert.Equal(t, float64(95000), updatedOrder.TotalPrice)

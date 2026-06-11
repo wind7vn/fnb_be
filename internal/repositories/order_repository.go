@@ -20,7 +20,11 @@ func (r *orderRepository) Create(order *domain.Order) error {
 
 func (r *orderRepository) FindByID(id string, tenantID string) (*domain.Order, error) {
 	var order domain.Order
-	err := r.dbConn.Scopes(db.TenantScope(tenantID)).Where("id = ?", id).Preload("Items").Preload("Items.Product").First(&order).Error
+	err := r.dbConn.Scopes(db.TenantScope(tenantID)).Where("id = ?", id).
+		Preload("Items").
+		Preload("Items.Product").
+		Preload("Table").
+		First(&order).Error
 	return &order, err
 }
 
@@ -30,6 +34,7 @@ func (r *orderRepository) FindActiveByTable(tableID string, tenantID string) (*d
 		Where("table_id = ? AND status NOT IN ('Paid', 'Cancelled')", tableID).
 		Preload("Items").
 		Preload("Items.Product").
+		Preload("Table").
 		First(&order).Error
 	return &order, err
 }
@@ -40,6 +45,7 @@ func (r *orderRepository) FindAllActive(tenantID string) ([]domain.Order, error)
 		Where("status NOT IN ('Paid', 'Cancelled')").
 		Preload("Items").
 		Preload("Items.Product").
+		Preload("Table").
 		Find(&orders).Error
 	return orders, err
 }
@@ -66,3 +72,12 @@ func (r *orderRepository) UpdateItemQuantity(itemID string, tenantID string, qua
 		"sub_total": newSubTotal,
 	}).Error
 }
+
+func (r *orderRepository) FindItemByID(itemID string) (*domain.OrderItem, error) {
+	var item domain.OrderItem
+	err := r.dbConn.Where("id = ?", itemID).
+		Preload("Product").
+		First(&item).Error
+	return &item, err
+}
+

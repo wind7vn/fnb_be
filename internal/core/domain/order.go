@@ -8,6 +8,7 @@ type Order struct {
 	BaseModel
 	TenantID   uuid.UUID  `gorm:"type:uuid;not null;index" json:"tenant_id"`
 	TableID    *uuid.UUID `gorm:"type:uuid;index" json:"table_id"` // Nullable for takeaway
+	Table      *Table     `gorm:"foreignKey:TableID" json:"table"`
 	Code       string     `gorm:"type:varchar(50);not null;uniqueIndex" json:"code"`
 	Status     string     `gorm:"type:varchar(50);not null" json:"status"` // Enum mapping needed
 	TotalPrice float64     `gorm:"type:decimal(12,2);not null;default:0" json:"total_price"`

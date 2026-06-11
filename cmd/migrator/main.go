@@ -42,7 +42,11 @@ func main() {
 
 	logger.Log.Info("Core Entity Schema AutoMigrate successful.")
 
-	logger.Log.Info("Core Entity Schema AutoMigrate successful.")
+	logger.Log.Info("Cleaning up legacy order item statuses (Preparing -> Cooking)...")
+	execRawSQL("UPDATE order_items SET status = 'Cooking' WHERE status = 'Preparing';")
+
+	logger.Log.Info("Cleaning up empty/null table statuses ('' -> 'Available')...")
+	execRawSQL("UPDATE tables SET status = 'Available' WHERE status = '' OR status IS NULL;")
 
 	logger.Log.Info("Migrations Applied Successfully!")
 }
